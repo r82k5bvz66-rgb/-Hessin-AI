@@ -26,7 +26,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.8.1";
+const VERSION = "2.9.0";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -71,6 +71,18 @@ function mergeMemory(session, incoming) {
       session.memory[String(key)] = String(value);
     }
   }
+}
+
+function normalizeHistory(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw.slice(-12)) {
+    const role = item?.role === "assistant" || item?.role === "ai" ? "assistant" : item?.role === "user" ? "user" : null;
+    const content = String(item?.content || item?.text || "").trim();
+    if (!role || !content) continue;
+    out.push({ role, content: content.slice(0, 1200) });
+  }
+  return out;
 }
 
 function formatMemory(memory) {
@@ -467,7 +479,7 @@ async function runBrowserSearch(message) {
   return text.replace(/【[^】]*】/g, "").trim();
 }
 
-async function runAgentLoop({ message, session, approved, searchContext }) {
+async function runAgentLoop({ message, session, approved, searchContext, history }) {
   const steps = [];
   steps.push({ type: "plan", text: "تحليل المهمة ووضع خطة تنفيذ" });
 
@@ -487,8 +499,10 @@ async function runAgentLoop({ message, session, approved, searchContext }) {
       : ""
   ].filter(Boolean).join("\n\n");
 
+  const historyMsgs = normalizeHistory(history);
   const messages = [
-    { role: "system", content: instructions },
+    { role: "system", content: instructions + "\nاستخدم سياق المحادثة السابقة إن وُجد، ولا تتجاهل تصحيحات المستخدم." },
+    ...historyMsgs,
     { role: "user", content: userBits }
   ];
 
@@ -593,7 +607,8 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const agent = await runAgentLoop({ message, session, approved, searchContext });
+    const history = normalizeHistory(req.body?.history);
+    const agent = await runAgentLoop({ message, session, approved, searchContext, history });
     const allSteps = steps.concat(agent.steps || []);
 
     const files = Object.entries(session.files).map(([name, content]) => ({
@@ -635,7 +650,8 @@ app.get("/health", (_req, res) => {
     hasKey: Boolean(groqKey),
     passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD),
     search: "groq_browser_search",
-    dailyDigest: true
+    dailyDigest: true,
+    multiTurn: true
   });
 });
 

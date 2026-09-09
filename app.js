@@ -213,6 +213,27 @@ function showPending(pending) {
   pendingEl.append(p, actions);
 }
 
+
+function recentHistory(limit = 8) {
+  const msgs = [...chat.querySelectorAll(".msg")].map((el) => ({
+    who: el.classList.contains("user") ? "user" : "ai",
+    text: (el.querySelector(".body")?.innerText || "").trim(),
+    error: el.classList.contains("error")
+  }));
+  // Drop welcome / loading / errors; keep last N turns before the current user+thinking placeholders
+  const cleaned = msgs.filter((m) => {
+    if (!m.text || m.error) return false;
+    if (m.who === "ai" && (m.text.startsWith("مرحباً بك") || m.text.startsWith("جارٍ التنفيذ"))) return false;
+    return true;
+  });
+  // Exclude the just-added current user message (last user) — server gets it as `message`
+  if (cleaned.length && cleaned[cleaned.length - 1].who === "user") cleaned.pop();
+  return cleaned.slice(-limit).map((m) => ({
+    role: m.who === "user" ? "user" : "assistant",
+    content: m.text.slice(0, 1200)
+  }));
+}
+
 async function sendChat(text, { approved } = {}) {
   const message = String(text || "").trim();
   if (!message) return;
@@ -236,6 +257,7 @@ async function sendChat(text, { approved } = {}) {
         message,
         sessionId: sessionId(),
         memory,
+        history: recentHistory(8),
         approved: Boolean(approved)
       })
     });
