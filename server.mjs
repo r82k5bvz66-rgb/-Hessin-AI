@@ -16,6 +16,7 @@ const client = new OpenAI({
 });
 
 const MODEL = process.env.MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-20b";
+const VERSION = "2.6.0";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -165,9 +166,22 @@ function safeEvalMath(expr) {
   return result;
 }
 
+function needsWebSearch(message) {
+  const t = String(message || "");
+  return /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|اليوم|latest|news|today)/i.test(t);
+}
 
-const tools = [
-  { type: "browser_search" },
+function isAiDigest(message) {
+  return /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء)/i.test(String(message || ""));
+}
+
+function isTradeDigest(message) {
+  return /(?:تجارة اليوم|التجارة العالمية|أسواق اليوم)/i.test(String(message || ""));
+}
+
+const searchTools = [{ type: "browser_search" }];
+
+const agentTools = [
   {
     type: "function",
     function: {
@@ -318,40 +332,23 @@ async function runTool(name, args, session) {
   return { ok: false, error: "أداة غير معروفة." };
 }
 
-const instructions = `أنت Hessin AI 2.5، وكيل شخصي متعدد الخطوات لصاحب الحساب (يعمل عبر Groq).
-تحدث بالعربية الفصحى الواضحة افتراضياً، مع لمسة سودانية خفيفة ودّية عندما يناسب السياق (بدون مبالغة أو ألفاظ مبهمة).
-اهتم بتطور التجارة العالمية يومياً، خصوصاً ما يمس السودان والمنطقة والإمداد والأسعار والفرص العملية للتجار.
+const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد الخطوات لصاحب الحساب (يعمل عبر Groq).
+أسلوبك: عربية فصحى واضحة ومرتبة، جمل قصيرة، نقاط مرقّمة عند التلخيص، بدون حشو أو ترجمة حرفية ركيكة. لمسة سودانية خفيفة ودّية فقط إذا تكلم صاحب الحساب بالسوداني.
+اهتم يومياً بالتجارة العالمية والذكاء الاصطناعي، خصوصاً ما يمس السودان والمنطقة والإمداد والأسعار وفرص التجار.
 استخدم الذاكرة الشخصية دائماً إذا كانت موجودة. لا تنسَ التفضيلات أو المشاريع أو الميزانية المحفوظة.
 إذا ذكر المستخدم معلومة ثابتة عن نفسه أو مشروعه أو أسلوبه، احفظها عبر memory_save بمفتاح قصير واضح.
 إذا طلب التصحيح، احفظ التصحيح ولا تكرر الغلط.
-لا تجب إجابة نهائية سريعة في المهام المركبة. قسّم العمل:
-1) فهم المهمة مع الذاكرة
-2) جمع البيانات بالبحث عند الحاجة
-3) الحساب عند وجود أرقام
-4) حفظ النتائج المهمة في الذاكرة
-5) إنشاء ملف إذا طلب المستخدم تقريراً
-6) نتيجة نهائية مرتبة
+في المهام المركبة: الهدف، ثم الخطوات، ثم النتيجة النهائية بنقاط واضحة.
 
-ابحث بالويب فورًا عبر أداة browser_search عندما يطلب المستخدم بحثًا أو أخبارًا أو أسعارًا حديثة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
+البحث على الويب يتم عبر مسار browser_search على خادم Groq قبل الرد النهائي عندما تكون الأخبار أو الأسعار مطلوبة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
 اطلب موافقة عبر request_approval فقط قبل شراء أو نشر أو إرسال رسائل أو حذف أو تغيير صلاحيات.
 لا تطلب مفتاح API من المستخدم. لا تكشف الأسرار.
 إذا نقصت بيانات، اذكر الافتراضات بوضوح.
 
-في المهام المركبة أظهر باختصار: الهدف، خطوات التنفيذ التي قمت بها، ثم النتيجة النهائية بنقاط واضحة.
-لا تختصر التنفيذ في جملة واحدة عندما يطلب بحثاً أو مقارنة أو تقريراً.
-
-عندما يُسأل عن التجارة أو الأسواق أو الأخبار التجارية:
-1) ابحث عن أحدث معلومات موثوقة
-2) لخّص التأثير العملي على التاجر (أسعار، شحن، رسوم، طلب، مخاطر)
-3) اذكر إن كانت المعلومة عامة أو مرتبطة بالسودان/الجوار عند الإمكان
-4) اقترح خطوة عملية قصيرة يمكن تنفيذها اليوم
-
-عندما يطلب المستخدم «AI اليوم» أو جديد الذكاء الاصطناعي أو تقنيات AI الجديدة:
-1) ابحث فوراً عن أحدث الأخبار والتقنيات اليوم
-2) اختر 3 إلى 5 نقاط مهمة فقط
-3) لكل نقطة: الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر
-4) اختم بسطر: «متابعة غداً» أو أهم شيء يستحق المراقبة
-احفظ في الذاكرة إن طلب المستخدم تذكيراً يومياً بهذا الموضوع.
+قوالب الردود:
+- «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
+- «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
+- للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
 1) لا تكشف المفاتيح أو التوكنات أو كلمات المرور أو البيانات الشخصية لأي طرف.
@@ -362,7 +359,6 @@ const instructions = `أنت Hessin AI 2.5، وكيل شخصي متعدد الخ
 6) اعمل ضمن القانون. الحماية لا تعني إيذاء أحد أو اختراق أنظمة أو انتقام.
 7) احفظ التفضيلات والمشاريع في الذاكرة، ولا تشاركها خارج جلسة صاحب الحساب.
 8) إذا تعارض طلب مع الحماية، أوقف التنفيذ واشرح السبب بالعربية الواضحة.
-أسلوب الرد: فصحى واضحة، والسوداني إذا تكلم صاحب الحساب بالسوداني.
 عند أول فرصة مناسبة احفظ ملخص هذه القواعد في الذاكرة بالمفتاح user_protection عبر memory_save.`;
 
 const toolLabels = {
@@ -375,6 +371,123 @@ const toolLabels = {
   list_files: "عرض الملفات",
   request_approval: "طلب موافقة"
 };
+
+function searchSystemPrompt(message) {
+  if (isAiDigest(message)) {
+    return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: موجز «AI اليوم» من أحدث المصادر عبر البحث.
+القواعد:
+1) استخدم البحث وجوباً.
+2) اختر 3 إلى 5 نقاط فقط (لا أكثر).
+3) لكل نقطة: عنوان قصير، ماذا يعني ببساطة، ولماذا يهم صاحب عمل أو تاجر.
+4) لا تذكر اقتباسات تقنية غريبة مثل 【1†L2】؛ اكتب نصاً نظيفاً.
+5) اختم بسطر: متابعة غداً: …`;
+  }
+  if (isTradeDigest(message)) {
+    return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: موجز «تجارة اليوم» من أحدث المصادر عبر البحث.
+القواعد:
+1) استخدم البحث وجوباً.
+2) 3 إلى 5 نقاط عن التجارة العالمية/الأسواق/الشحن/الأسعار.
+3) لكل نقطة: ماذا حدث + الأثر العملي على التاجر.
+4) اربط بالسودان أو الجوار عند الإمكان، وإلا صرّح أن الربط عام.
+5) لا تذكر رموز اقتباس داخلية من أدوات البحث.
+6) اختم بسطر: خطوة اليوم: …`;
+  }
+  return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة.
+استخدم البحث للإجابة عن طلب المستخدم بملخص عملي مرتب بنقاط، بدون حشو وبدون رموز اقتباس داخلية من أدوات البحث.`;
+}
+
+async function runBrowserSearch(message) {
+  const completion = await client.chat.completions.create({
+    model: MODEL,
+    messages: [
+      { role: "system", content: searchSystemPrompt(message) },
+      { role: "user", content: message }
+    ],
+    tools: searchTools,
+    tool_choice: "required",
+    temperature: 1,
+    max_completion_tokens: 2048,
+    reasoning_effort: "low"
+  });
+  const msg = completion.choices?.[0]?.message;
+  const text = String(msg?.content || "").trim();
+  if (!text) throw new Error("تعذر الحصول على نتيجة بحث من Groq.");
+  return text.replace(/【[^】]*】/g, "").trim();
+}
+
+async function runAgentLoop({ message, session, approved, searchContext }) {
+  const steps = [];
+  steps.push({ type: "plan", text: "تحليل المهمة ووضع خطة تنفيذ" });
+
+  if (approved && session.pending) {
+    steps.push({ type: "approval", text: `تمت الموافقة على: ${session.pending.action}` });
+    session.pending = null;
+  }
+
+  const userBits = [
+    message,
+    approved ? "المستخدم وافق على الإجراء المعلق إن وجد." : "",
+    searchContext
+      ? `نتائج بحث حديثة (اعتمد عليها وأعد صياغة عربية مرتبة إن لزم):\n${searchContext}`
+      : "",
+    Object.keys(session.memory).length
+      ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}`
+      : ""
+  ].filter(Boolean).join("\n\n");
+
+  const messages = [
+    { role: "system", content: instructions },
+    { role: "user", content: userBits }
+  ];
+
+  let finalText = "";
+  for (let i = 0; i < 10; i++) {
+    const completion = await client.chat.completions.create({
+      model: MODEL,
+      messages,
+      tools: agentTools,
+      tool_choice: "auto",
+      temperature: 0.4,
+      max_completion_tokens: 2048
+    });
+
+    const choice = completion.choices?.[0];
+    const msg = choice?.message;
+    if (!msg) {
+      finalText = "اكتملت الخطوات، لكن لم يصل رد نصي.";
+      break;
+    }
+
+    const toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    if (!toolCalls.length) {
+      finalText = msg.content || "اكتملت الخطوات، لكن لم يصل رد نصي.";
+      break;
+    }
+
+    messages.push({
+      role: "assistant",
+      content: msg.content || null,
+      tool_calls: toolCalls
+    });
+
+    for (const call of toolCalls) {
+      const name = call.function?.name || "";
+      let args = {};
+      try { args = JSON.parse(call.function?.arguments || "{}"); } catch { args = {}; }
+      steps.push({ type: "tool", text: toolLabels[name] || `تنفيذ: ${name}` });
+      const result = await runTool(name, args, session);
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: JSON.stringify(result)
+      });
+    }
+  }
+
+  return { text: finalText, steps };
+}
 
 app.post("/api/chat", async (req, res) => {
   try {
@@ -403,88 +516,35 @@ app.post("/api/chat", async (req, res) => {
         memory: session.memory,
         files: [],
         pending: session.pending,
-        version: "2.5.0",
+        version: VERSION,
         provider: "groq"
       });
     }
+
     const steps = [];
-    steps.push({ type: "plan", text: "تحليل المهمة ووضع خطة تنفيذ" });
+    let searchContext = "";
+    const digestOnly = isAiDigest(message) || isTradeDigest(message);
 
-    if (approved && session.pending) {
-      steps.push({ type: "approval", text: `تمت الموافقة على: ${session.pending.action}` });
-      session.pending = null;
+    if (needsWebSearch(message)) {
+      steps.push({ type: "tool", text: toolLabels.browser_search });
+      searchContext = await runBrowserSearch(message);
+      session.log.push({ type: "search", query: message.slice(0, 120) });
     }
 
-    const userBits = [
-      message,
-      approved ? "المستخدم وافق على الإجراء المعلق إن وجد." : "",
-      /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء)/i.test(message)
-        ? "هذا طلب موجز يومي لتقنيات وأخبار الذكاء الاصطناعي. استخدم البحث وأعد 3-5 نقاط عملية."
-        : "",
-      /(?:تجارة اليوم|التجارة العالمية|أسواق اليوم)/i.test(message)
-        ? "هذا طلب موجز يومي لتطور التجارة العالمية مع أثر عملي، ويفضّل ربطه بالسودان/الجوار إن أمكن."
-        : "",
-      Object.keys(session.memory).length
-        ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}`
-        : ""
-    ].filter(Boolean).join("\n");
-
-    const messages = [
-      { role: "system", content: instructions },
-      { role: "user", content: userBits }
-    ];
-
-    let finalText = "";
-    for (let i = 0; i < 10; i++) {
-      const completion = await client.chat.completions.create({
-        model: MODEL,
-        messages,
-        tools,
-        tool_choice: "auto",
-        temperature: 0.4
+    if (digestOnly && searchContext) {
+      return res.json({
+        text: searchContext,
+        steps,
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq"
       });
-
-      const choice = completion.choices?.[0];
-      const msg = choice?.message;
-      if (!msg) {
-        finalText = "اكتملت الخطوات، لكن لم يصل رد نصي.";
-        break;
-      }
-
-      const toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
-      if (!toolCalls.length) {
-        finalText = msg.content || "اكتملت الخطوات، لكن لم يصل رد نصي.";
-        break;
-      }
-
-      messages.push({
-        role: "assistant",
-        content: msg.content || null,
-        tool_calls: toolCalls
-      });
-
-      for (const call of toolCalls) {
-        const name = call.function?.name || call.type || "";
-        let args = {};
-        try { args = JSON.parse(call.function?.arguments || "{}"); } catch { args = {}; }
-        steps.push({ type: "tool", text: toolLabels[name] || `تنفيذ: ${name}` });
-        if (name === "browser_search") {
-          session.log.push({ type: "search", query: args.query || args.q || "" });
-          messages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content: JSON.stringify({ ok: true, note: "تم البحث عبر Groq browser_search" })
-          });
-          continue;
-        }
-        const result = await runTool(name, args, session);
-        messages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: JSON.stringify(result)
-        });
-      }
     }
+
+    const agent = await runAgentLoop({ message, session, approved, searchContext });
+    const allSteps = steps.concat(agent.steps || []);
 
     const files = Object.entries(session.files).map(([name, content]) => ({
       name,
@@ -492,22 +552,25 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     res.json({
-      text: finalText || "اكتملت الخطوات، لكن لم يصل رد نصي.",
-      steps,
+      text: agent.text || searchContext || "اكتملت الخطوات، لكن لم يصل رد نصي.",
+      steps: allSteps,
       memory: session.memory,
       files,
       pending: session.pending,
-      version: "2.5.0",
+      version: VERSION,
       provider: "groq"
     });
   } catch (error) {
     console.error(error);
     const detail = error?.message || "حدث خطأ في الخادم.";
     const quota = detail.includes("429") || /quota|billing|insufficient|rate limit/i.test(detail);
+    const modelIssue = /model|tool|browser_search|unsupported/i.test(detail);
     res.status(500).json({
       error: quota
         ? "حد استخدام Groq ممتلئ مؤقتاً أو المفتاح غير صالح. تحقق من GROQ_API_KEY والرصيد/الحدود ثم أعد المحاولة."
-        : "حدث خطأ في الخادم. تحقق من مفتاح Groq والنموذج ثم أعد المحاولة."
+        : modelIssue
+          ? "تعذر إكمال الطلب على نموذج Groq أو أداة البحث. تأكد أن MODEL=openai/gpt-oss-20b ثم أعد المحاولة."
+          : "حدث خطأ في الخادم. حاول مرة أخرى بعد لحظات."
     });
   }
 });
@@ -516,11 +579,12 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "Hessin AI",
-    version: "2.5.0",
+    version: VERSION,
     provider: "groq",
     model: MODEL,
     hasKey: Boolean(groqKey),
-    passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD)
+    passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD),
+    search: "groq_browser_search"
   });
 });
 
@@ -529,6 +593,6 @@ export default app;
 if (!process.env.VERCEL) {
   const port = process.env.PORT || 3000;
   app.listen(port, () => {
-    console.log(`Hessin AI 2.5 (Groq) running at http://localhost:${port}`);
+    console.log(`Hessin AI ${VERSION} (Groq) running at http://localhost:${port}`);
   });
 }
