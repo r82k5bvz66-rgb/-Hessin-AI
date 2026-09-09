@@ -16,7 +16,7 @@ const client = new OpenAI({
 });
 
 const MODEL = process.env.MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-20b";
-const VERSION = "2.6.0";
+const VERSION = "2.7.0";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -71,7 +71,7 @@ function formatMemory(memory) {
 
 function handleMemoryCommand(message, session) {
   const text = message.trim();
-  const learn = text.match(/^(?:تعلم هذا|تعلّم هذا|احفظ)\s*[:：-]?\s*(.+)$/i);
+  const learn = text.match(/^(?:تعلم هذا|تعلّم هذا|احفظ هذا|احفظ)\s*[:：-]?\s*(.+)$/i);
   if (learn) {
     const payload = learn[1].trim();
     const parts = payload.split(/[=:：]/);
@@ -168,7 +168,7 @@ function safeEvalMath(expr) {
 
 function needsWebSearch(message) {
   const t = String(message || "");
-  return /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|اليوم|latest|news|today)/i.test(t);
+  return /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|اليوم|latest|news|today|price)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -177,6 +177,10 @@ function isAiDigest(message) {
 
 function isTradeDigest(message) {
   return /(?:تجارة اليوم|التجارة العالمية|أسواق اليوم)/i.test(String(message || ""));
+}
+
+function isPriceReport(message) {
+  return /(?:تقرير أسعار|تقرير اسعار|أسعار اليوم|اسعار اليوم)/i.test(String(message || ""));
 }
 
 const searchTools = [{ type: "browser_search" }];
@@ -348,6 +352,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 قوالب الردود:
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
+- «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -393,6 +398,21 @@ function searchSystemPrompt(message) {
 4) اربط بالسودان أو الجوار عند الإمكان، وإلا صرّح أن الربط عام.
 5) لا تذكر رموز اقتباس داخلية من أدوات البحث.
 6) اختم بسطر: خطوة اليوم: …`;
+  }
+  if (isPriceReport(message)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: «تقرير أسعار» من أحدث المصادر عبر البحث.
+التاريخ المرجعي: ${today}
+القواعد الإلزامية لشكل الرد:
+1) استخدم البحث وجوباً.
+2) العنوان في أول سطر: تقرير أسعار — ثم التاريخ الميلادي الواضح.
+3) بعد العنوان: 4 إلى 6 أسعار فقط (دولار/عملات، ذهب، نفط، أو قطع غيار شاحنات/حافلات مثل فرامل DOSA إن ظهر سياق المستخدم).
+4) لكل سعر سطر واضح: الاسم — القيمة — المصدر/السوق إن عرف.
+5) قسم «أثر عملي على التاجر:» بجملتين عمليتين.
+6) قسم «خطوة مقترحة اليوم:» بجملة واحدة.
+7) إذا نقصت أرقام حديثة مؤكدة، اكتب بصراحة: «بعض الأرقام تقديرية أو تقريبية بسبب نقص بيانات مباشرة.»
+8) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
   }
   return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة.
 استخدم البحث للإجابة عن طلب المستخدم بملخص عملي مرتب بنقاط، بدون حشو وبدون رموز اقتباس داخلية من أدوات البحث.`;
@@ -523,7 +543,7 @@ app.post("/api/chat", async (req, res) => {
 
     const steps = [];
     let searchContext = "";
-    const digestOnly = isAiDigest(message) || isTradeDigest(message);
+    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message);
 
     if (needsWebSearch(message)) {
       steps.push({ type: "tool", text: toolLabels.browser_search });

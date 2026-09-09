@@ -6,14 +6,17 @@ const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
 const hintsEl = document.getElementById("hints");
+const memoryBanner = document.getElementById("memoryBanner");
 
 const STORAGE_KEY = "hessin-ai-v2";
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب «تجارة اليوم» أو «AI اليوم»، أو اطلب بحثاً أو حساباً — وأنفّذ المهمة خطوة بخطوة.";
+const MEMORY_KEY = "hessin-ai-memory";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nجرّب: تجارة اليوم، AI اليوم، تقرير أسعار، أو احفظ معلومة عن مشروعك.";
 
 const HINTS = [
   { label: "تجارة اليوم", text: "تجارة اليوم" },
   { label: "AI اليوم", text: "AI اليوم" },
-  { label: "احسب", text: "احسب لي: " }
+  { label: "تقرير أسعار", text: "تقرير أسعار" },
+  { label: "ماذا تعرف عني", text: "ماذا تعرف عني" }
 ];
 
 function sessionId() {
@@ -37,6 +40,37 @@ function saveState(partial) {
   const next = { ...loadState(), ...partial };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
+}
+
+function loadMemory() {
+  try {
+    const fromDedicated = JSON.parse(localStorage.getItem(MEMORY_KEY) || "null");
+    if (fromDedicated && typeof fromDedicated === "object") return fromDedicated;
+  } catch {}
+  const state = loadState();
+  return state.memory && typeof state.memory === "object" ? state.memory : {};
+}
+
+function saveMemory(memory) {
+  const clean = memory && typeof memory === "object" ? memory : {};
+  localStorage.setItem(MEMORY_KEY, JSON.stringify(clean));
+  saveState({ memory: clean });
+  return clean;
+}
+
+function memoryCount(memory) {
+  return Object.keys(memory || {}).filter((k) => k !== "user_protection").length;
+}
+
+function showMemoryRestored(memory) {
+  const count = memoryCount(memory);
+  if (!count) {
+    memoryBanner.classList.add("hidden");
+    memoryBanner.textContent = "";
+    return;
+  }
+  memoryBanner.classList.remove("hidden");
+  memoryBanner.textContent = `تم استرجاع الذاكرة على هذا الجهاز (${count} معلومة). اكتب «ماذا تعرف عني» لعرضها.`;
 }
 
 function setStatus(kind, label) {
@@ -152,7 +186,7 @@ function restoreChat() {
 
 function resizeInput() {
   input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  input.style.height = Math.min(input.scrollHeight, 140) + "px";
 }
 
 function renderHints() {
@@ -165,8 +199,7 @@ function renderHints() {
     b.onclick = () => {
       input.value = h.text;
       resizeInput();
-      input.focus();
-      if (h.label !== "احسب") sendChat(h.text);
+      sendChat(h.text);
     };
     hintsEl.appendChild(b);
   }
@@ -217,7 +250,7 @@ async function sendChat(text, { approved } = {}) {
   const thinking = addMessage({ text: "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.", who: "ai" });
 
   try {
-    const memory = loadState().memory || {};
+    const memory = loadMemory();
     const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -235,6 +268,8 @@ async function sendChat(text, { approved } = {}) {
       setStatus("error", "خطأ");
     } else {
       thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت الخطوات، لكن لم يصل رد نصي.");
+      // clear old step chips if any then add
+      thinking.root.querySelectorAll(".steps,.files").forEach((el) => el.remove());
       if (data.steps && data.steps.length) {
         const wrap = document.createElement("div");
         wrap.className = "steps";
@@ -259,7 +294,10 @@ async function sendChat(text, { approved } = {}) {
         }
         thinking.root.appendChild(wrap);
       }
-      if (data.memory) saveState({ memory: data.memory });
+      if (data.memory) {
+        saveMemory(data.memory);
+        showMemoryRestored(data.memory);
+      }
       showPending(data.pending);
       setStatus("ready", "جاهز");
     }
@@ -293,14 +331,21 @@ input.addEventListener("input", resizeInput);
 clearBtn.addEventListener("click", () => {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem("hessin-session-id");
+  // keep MEMORY_KEY so memory persists across new chats
   showPending(null);
   showWelcome();
   setStatus("ready", "جاهز");
   persistChat();
+  showMemoryRestored(loadMemory());
   input.focus();
 });
 
+const restoredMemory = loadMemory();
+if (restoredMemory && Object.keys(restoredMemory).length) {
+  saveMemory(restoredMemory);
+}
 restoreChat();
 renderHints();
+showMemoryRestored(restoredMemory);
 resizeInput();
 input.focus();
