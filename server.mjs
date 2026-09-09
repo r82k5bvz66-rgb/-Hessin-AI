@@ -15,8 +15,18 @@ const client = new OpenAI({
   baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"
 });
 
-const MODEL = process.env.MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-20b";
-const VERSION = "2.8.0";
+function resolveModel() {
+  const raw = String(process.env.MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-20b").trim();
+  // Common Vercel paste mistakes: leading space, quotes, wrong llama model for browser_search
+  const cleaned = raw.replace(/^["']|["']$/g, "").trim();
+  if (!cleaned || /llama-3\.3-70b-versatile/i.test(cleaned)) {
+    return "openai/gpt-oss-20b";
+  }
+  return cleaned;
+}
+
+const MODEL = resolveModel();
+const VERSION = "2.8.1";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -168,7 +178,7 @@ function safeEvalMath(expr) {
 
 function needsWebSearch(message) {
   const t = String(message || "");
-  return /(?:ملخص يومي|موجز اليوم|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|اليوم|latest|news|today|price)/i.test(t);
+  return /(?:ملخص يومي|موجز اليوم|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -184,8 +194,8 @@ function isPriceReport(message) {
 }
 
 function isDailyDigest(message) {
-  return /(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(String(message || "").trim())
-    || /^(?:ملخص يومي|موجز اليوم|تقرير اليوم)/i.test(String(message || "").trim());
+  const t = String(message || "").trim();
+  return /^(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(t);
 }
 
 const searchTools = [{ type: "browser_search" }];
