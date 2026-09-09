@@ -97,7 +97,7 @@ function friendlyError(raw) {
     return "حد استخدام Groq ممتلئ مؤقتاً أو المفتاح غير صالح. تحقق من الإعدادات ثم أعد المحاولة.";
   }
   if (/MODEL|browser_search|نموذج Groq|أداة البحث/i.test(t)) {
-    return "تعذر إكمال البحث أو النموذج. تأكد أن MODEL=openai/gpt-oss-20b ثم أعد المحاولة.";
+    return "تعذر إكمال البحث مؤقتاً. حاول مرة أخرى بعد قليل.";
   }
   if (/401|كلمة السر|password|needPassword/i.test(t)) {
     return "كلمة المرور غير صحيحة.";

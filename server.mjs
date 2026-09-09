@@ -26,7 +26,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.9.0";
+const VERSION = "2.9.2";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -461,8 +461,9 @@ function searchSystemPrompt(message) {
 }
 
 async function runBrowserSearch(message) {
+  const model = resolveModel();
   const completion = await client.chat.completions.create({
-    model: MODEL,
+    model,
     messages: [
       { role: "system", content: searchSystemPrompt(message) },
       { role: "user", content: message }
@@ -477,6 +478,77 @@ async function runBrowserSearch(message) {
   const text = String(msg?.content || "").trim();
   if (!text) throw new Error("تعذر الحصول على نتيجة بحث من Groq.");
   return text.replace(/【[^】]*】/g, "").trim();
+}
+
+async function runGeneralDigest(message) {
+  const today = new Date().toISOString().slice(0, 10);
+  const kind = isAiDigest(message)
+    ? "AI اليوم"
+    : isTradeDigest(message)
+      ? "تجارة اليوم"
+      : isPriceReport(message)
+        ? "تقرير أسعار"
+        : isDailyDigest(message)
+          ? "ملخص يومي"
+          : "ملخص";
+  const completion = await client.chat.completions.create({
+    model: resolveModel(),
+    messages: [
+      {
+        role: "system",
+        content: `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+البحث الحي (browser_search) غير متاح الآن.
+قدّم إجابة مفيدة عامة لطلب «${kind}» بتاريخ ${today}.
+ابدأ بجملة قصيرة: «ملاحظة: البحث الحي غير متاح حالياً، وهذا ملخص عام.»
+ثم أكمل بنفس هيكل التقرير المطلوب قدر الإمكان، واذكر أن الأرقام/الأخبار قد تحتاج تحقق لاحق.`
+      },
+      { role: "user", content: message }
+    ],
+    temperature: 0.5,
+    max_completion_tokens: 1200
+  });
+  const text = String(completion.choices?.[0]?.message?.content || "").trim();
+  if (!text) {
+    return "ملاحظة: البحث الحي غير متاح حالياً. تعذر أيضاً توليد ملخص عام. حاول مرة أخرى بعد قليل.";
+  }
+  return text;
+}
+
+async function runCompoundSearch(message) {
+  const completion = await client.chat.completions.create({
+    model: "groq/compound",
+    messages: [
+      { role: "system", content: searchSystemPrompt(message) + "\nاكتب بالعربية الفصحى الواضحة." },
+      { role: "user", content: message }
+    ],
+    temperature: 0.4,
+    max_completion_tokens: 2048
+  });
+  const text = String(completion.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("compound empty");
+  return text.replace(/【[^】]*】/g, "").trim();
+}
+
+async function runSearchWithFallback(message, steps) {
+  try {
+    steps.push({ type: "tool", text: "بحث على الويب" });
+    const text = await runBrowserSearch(message);
+    return { text, mode: "browser_search" };
+  } catch (err1) {
+    console.warn("browser_search failed:", err1?.message || err1);
+  }
+
+  try {
+    steps.push({ type: "tool", text: "بحث بديل (compound)" });
+    const text = await runCompoundSearch(message);
+    return { text, mode: "compound" };
+  } catch (err2) {
+    console.warn("compound search failed:", err2?.message || err2);
+  }
+
+  steps.push({ type: "tool", text: "ملخص عام بدون بحث حي" });
+  const text = await runGeneralDigest(message);
+  return { text, mode: "general", liveSearch: false };
 }
 
 async function runAgentLoop({ message, session, approved, searchContext, history }) {
@@ -587,12 +659,14 @@ app.post("/api/chat", async (req, res) => {
 
     const steps = [];
     let searchContext = "";
+    let searchMode = "";
     const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message);
 
-    if (needsWebSearch(message)) {
-      steps.push({ type: "tool", text: toolLabels.browser_search });
-      searchContext = await runBrowserSearch(message);
-      session.log.push({ type: "search", query: message.slice(0, 120) });
+    if (needsWebSearch(message) || digestOnly) {
+      const searched = await runSearchWithFallback(message, steps);
+      searchContext = searched.text;
+      searchMode = searched.mode || "";
+      session.log.push({ type: "search", query: message.slice(0, 120), mode: searchMode });
     }
 
     if (digestOnly && searchContext) {
@@ -603,7 +677,8 @@ app.post("/api/chat", async (req, res) => {
         files: [],
         pending: session.pending,
         version: VERSION,
-        provider: "groq"
+        provider: "groq",
+        searchMode
       });
     }
 
@@ -629,13 +704,21 @@ app.post("/api/chat", async (req, res) => {
     console.error(error);
     const detail = error?.message || "حدث خطأ في الخادم.";
     const quota = detail.includes("429") || /quota|billing|insufficient|rate limit/i.test(detail);
-    const modelIssue = /model|tool|browser_search|unsupported/i.test(detail);
-    res.status(500).json({
-      error: quota
-        ? "حد استخدام Groq ممتلئ مؤقتاً أو المفتاح غير صالح. تحقق من GROQ_API_KEY والرصيد/الحدود ثم أعد المحاولة."
-        : modelIssue
-          ? "تعذر إكمال الطلب على نموذج Groq أو أداة البحث. تأكد أن MODEL=openai/gpt-oss-20b ثم أعد المحاولة."
-          : "حدث خطأ في الخادم. حاول مرة أخرى بعد لحظات."
+    // Avoid long red model/search errors — calm Arabic reply instead
+    if (!quota) {
+      return res.json({
+        text: "تعذر إكمال الطلب الآن. إن كان طلب بحث أو تقرير يومي، قد يكون البحث الحي غير متاح مؤقتاً — أعد المحاولة بعد قليل.",
+        steps: [{ type: "plan", text: "تعذر التنفيذ مؤقتاً" }],
+        memory: getSession(String(req.body?.sessionId || "default")).memory,
+        files: [],
+        pending: null,
+        version: VERSION,
+        provider: "groq",
+        softError: true
+      });
+    }
+    return res.status(500).json({
+      error: "حد استخدام Groq ممتلئ مؤقتاً. حاول لاحقاً."
     });
   }
 });
@@ -651,7 +734,8 @@ app.get("/health", (_req, res) => {
     passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD),
     search: "groq_browser_search",
     dailyDigest: true,
-    multiTurn: true
+    multiTurn: true,
+    searchFallback: true
   });
 });
 
