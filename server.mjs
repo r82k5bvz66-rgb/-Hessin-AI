@@ -16,7 +16,7 @@ const client = new OpenAI({
 });
 
 const MODEL = process.env.MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-20b";
-const VERSION = "2.7.0";
+const VERSION = "2.8.0";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -168,7 +168,7 @@ function safeEvalMath(expr) {
 
 function needsWebSearch(message) {
   const t = String(message || "");
-  return /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|اليوم|latest|news|today|price)/i.test(t);
+  return /(?:ملخص يومي|موجز اليوم|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|اليوم|latest|news|today|price)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -181,6 +181,11 @@ function isTradeDigest(message) {
 
 function isPriceReport(message) {
   return /(?:تقرير أسعار|تقرير اسعار|أسعار اليوم|اسعار اليوم)/i.test(String(message || ""));
+}
+
+function isDailyDigest(message) {
+  return /(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(String(message || "").trim())
+    || /^(?:ملخص يومي|موجز اليوم|تقرير اليوم)/i.test(String(message || "").trim());
 }
 
 const searchTools = [{ type: "browser_search" }];
@@ -353,6 +358,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -413,6 +419,20 @@ function searchSystemPrompt(message) {
 6) قسم «خطوة مقترحة اليوم:» بجملة واحدة.
 7) إذا نقصت أرقام حديثة مؤكدة، اكتب بصراحة: «بعض الأرقام تقديرية أو تقريبية بسبب نقص بيانات مباشرة.»
 8) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
+  }
+  if (isDailyDigest(message)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: «ملخص يومي» لتاجر/صاحب مشروع (مثل قطع غيار الشاحنات والحافلات إن ظهر في السياق).
+التاريخ: ${today}
+القواعد:
+1) استخدم البحث وجوباً.
+2) العنوان: ملخص يومي — ثم التاريخ.
+3) قسم «التجارة»: نقطتان عمليتان فقط.
+4) قسم «الذكاء الاصطناعي»: نقطتان فقط، مع فائدة عملية لصاحب عمل.
+5) قسم «الأسعار»: سطران إلى ثلاثة (دولار/ذهب/نفط أو قطع غيار إن أمكن). إن نقصت الأرقام اكتب أنها تقديرية.
+6) اختم بـ «خطوة اليوم:» جملة واحدة قابلة للتنفيذ.
+7) لا تذكر رموز اقتباس داخلية من أدوات البحث. لا تطل أكثر من اللازم.`;
   }
   return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة.
 استخدم البحث للإجابة عن طلب المستخدم بملخص عملي مرتب بنقاط، بدون حشو وبدون رموز اقتباس داخلية من أدوات البحث.`;
@@ -543,7 +563,7 @@ app.post("/api/chat", async (req, res) => {
 
     const steps = [];
     let searchContext = "";
-    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message);
+    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message);
 
     if (needsWebSearch(message)) {
       steps.push({ type: "tool", text: toolLabels.browser_search });
@@ -604,7 +624,8 @@ app.get("/health", (_req, res) => {
     model: MODEL,
     hasKey: Boolean(groqKey),
     passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD),
-    search: "groq_browser_search"
+    search: "groq_browser_search",
+    dailyDigest: true
   });
 });
 

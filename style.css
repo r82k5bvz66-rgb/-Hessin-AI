@@ -308,3 +308,30 @@ button#send:disabled { opacity: 0.55; cursor: not-allowed; }
   .ghost { padding: 10px 10px; font-size: 12px; }
   .brand p { display: none; }
 }
+
+
+.digest-offer {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #121a2e;
+  border: 1px solid #2f3f66;
+  color: #d7e2ff;
+  font-size: 13px;
+  line-height: 1.55;
+  flex-shrink: 0;
+}
+.digest-offer.hidden { display: none; }
+.digest-offer p { margin: 0 0 10px; }
+.digest-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.digest-yes, .digest-skip {
+  border: 0;
+  border-radius: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 13px;
+}
+.digest-yes { background: var(--accent); color: #fff; }
+.digest-skip { background: #1b2438; color: #c9d4ea; border: 1px solid var(--line); }
