@@ -20,8 +20,25 @@
     <div id="lock" class="lock">
       <div>أدخل كلمة السر لفتح وكيلك</div>
       <input id="pass" type="password" placeholder="كلمة السر">
-      <button id="unlock" type="button">فتح</button>
+      <button id="unlock" type="button" onclick="var p=document.getElementById('pass').value.trim(); if(!p)return; localStorage.setItem('hessin_pass',p); document.getElementById('lock').style.display='none';">فتح</button>
     </div>
     <section id="chat" class="chat">
       <div class="msg ai">
-        <b>Hessin
+        <b>Hessin AI</b>
+        <div>لنقل الذاكرة لهاتف آخر اكتب: أعطني رمز الذاكرة
+ثم على الهاتف الآخر: استورد الذاكرة: الرمز</div>
+      </div>
+    </section>
+    <div id="approval" class="approval hidden">
+      <div id="approvalText"></div>
+      <button id="approve" type="button">أوافق</button>
+    </div>
+    <form id="form" class="composer">
+      <textarea id="input" rows="1" placeholder="اكتب المهمة هنا…"></textarea>
+      <button id="send" type="submit">تنفيذ</button>
+    </form>
+    <div class="hint">ضع كلمة السر في Vercel باسم HESSIN_ACCESS_PASSWORD</div>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
