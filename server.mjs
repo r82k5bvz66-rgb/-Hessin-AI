@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 app.use(express.json({limit:"2mb"}));
-app.use(express.static("public"));
+app.use(express.static("."));
 
 const instructions = `أنت Hessin AI، وكيل شخصي عام. تحدث بالعربية افتراضياً وبأسلوب واضح وعملي. ساعد في البحث، الأعمال، التجارة، السفر، صناعة المحتوى، التقنية، الملفات والحسابات. استخدم البحث عندما تكون المعلومات حديثة. لا تدّع تنفيذ إجراء خارجي ما لم يتم فعلاً. قبل النشر أو الحذف أو الشراء أو إرسال الرسائل أو تغيير الصلاحيات، اطلب تأكيد المستخدم. لا تطلب مفتاح API من المستخدم داخل المحادثة.`;
 
