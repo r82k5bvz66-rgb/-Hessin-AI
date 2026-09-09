@@ -310,7 +310,7 @@ function collectFunctionCalls(response) {
   return calls;
 }
 
-const instructions = `أنت Hessin AI 2.1، وكيل شخصي عام متعدد الخطوات لصاحب الحساب.
+const instructions = `أنت Hessin AI 2.2، وكيل شخصي عام متعدد الخطوات لصاحب الحساب.
 تحدث بالعربية افتراضياً وبأسلوب واضح وعملي.
 استخدم الذاكرة الشخصية دائماً إذا كانت موجودة. لا تنسَ التفضيلات أو المشاريع أو الميزانية المحفوظة.
 إذا ذكر المستخدم معلومة ثابتة عن نفسه أو مشروعه أو أسلوبه، احفظها عبر memory_save بمفتاح قصير واضح.
@@ -326,7 +326,10 @@ const instructions = `أنت Hessin AI 2.1، وكيل شخصي عام متعدد
 ابحث بالويب فورًا عندما يطلب المستخدم بحثًا أو أخبارًا أو أسعارًا حديثة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
 اطلب موافقة عبر request_approval فقط قبل شراء أو نشر أو إرسال رسائل أو حذف أو تغيير صلاحيات.
 لا تطلب مفتاح API من المستخدم. لا تكشف الأسرار.
-إذا نقصت بيانات، اذكر الافتراضات بوضوح.`;
+إذا نقصت بيانات، اذكر الافتراضات بوضوح.
+
+في المهام المركبة أظهر باختصار: الهدف، خطوات التنفيذ التي قمت بها، ثم النتيجة النهائية بنقاط واضحة.
+لا تختصر التنفيذ في جملة واحدة عندما يطلب بحثاً أو مقارنة أو تقريراً.`;
 
 app.post("/api/chat", async (req, res) => {
   try {
@@ -352,10 +355,11 @@ app.post("/api/chat", async (req, res) => {
         memory: session.memory,
         files: [],
         pending: session.pending,
-        version: "2.2.0"
+        version: "2.2.1"
       });
     }
     const steps = [];
+    steps.push({ type: "plan", text: "تحليل المهمة ووضع خطة تنفيذ" });
 
     if (approved && session.pending) {
       steps.push({ type: "approval", text: `تمت الموافقة على: ${session.pending.action}` });
@@ -387,7 +391,7 @@ app.post("/api/chat", async (req, res) => {
       input
     });
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const calls = collectFunctionCalls(response);
       if (!calls.length) break;
 
@@ -395,7 +399,8 @@ app.post("/api/chat", async (req, res) => {
       for (const call of calls) {
         let args = {};
         try { args = JSON.parse(call.arguments || "{}"); } catch { args = {}; }
-        steps.push({ type: "tool", text: `تنفيذ أداة: ${call.name}` });
+        const toolLabels = { web_search: "بحث على الويب", calculator: "حساب دقيق", memory_save: "حفظ في الذاكرة", memory_read: "قراءة الذاكرة", memory_delete: "حذف من الذاكرة", create_file: "إنشاء ملف", list_files: "عرض الملفات", request_approval: "طلب موافقة" };
+        steps.push({ type: "tool", text: toolLabels[call.name] || ("تنفيذ: " + call.name) });
         const result = await runTool(call.name, args, session);
         outputs.push({
           type: "function_call_output",
@@ -424,7 +429,7 @@ app.post("/api/chat", async (req, res) => {
       memory: session.memory,
       files,
       pending: session.pending,
-      version: "2.2.0"
+      version: "2.2.1"
     });
   } catch (error) {
     console.error(error);
@@ -441,7 +446,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "Hessin AI",
-    version: "2.2.0",
+    version: "2.2.1",
     hasKey: Boolean(process.env.OPENAI_API_KEY),
     passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD)
   });
