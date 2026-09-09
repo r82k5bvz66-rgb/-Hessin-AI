@@ -8,11 +8,11 @@ const pendingEl = document.getElementById("pending");
 const hintsEl = document.getElementById("hints");
 
 const STORAGE_KEY = "hessin-ai-v2";
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك متعدد الخطوات.\nاطلب مني البحث، الحساب، متابعة التجارة، أو جديد الذكاء الاصطناعي — وأنا أقسّم المهمة وأنفّذها.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب «تجارة اليوم» أو «AI اليوم»، أو اطلب بحثاً أو حساباً — وأنفّذ المهمة خطوة بخطوة.";
 
 const HINTS = [
-  { label: "تجارة اليوم", text: "لخّص أهم تطورات التجارة العالمية اليوم باختصار عملي" },
-  { label: "AI اليوم", text: "ما أحدث تقنيات وأخبار الذكاء الاصطناعي اليوم؟" },
+  { label: "تجارة اليوم", text: "تجارة اليوم" },
+  { label: "AI اليوم", text: "AI اليوم" },
   { label: "احسب", text: "احسب لي: " }
 ];
 
@@ -65,8 +65,11 @@ function renderMarkdown(text) {
 
 function friendlyError(raw) {
   const t = String(raw || "");
-  if (/quota|billing|insufficient|رصيد|صفر/i.test(t)) {
-    return "رصيد OpenAI غير كافٍ أو منتهٍ. أضِف رصيداً من لوحة OpenAI ثم أعد المحاولة.";
+  if (/quota|billing|insufficient|rate limit|رصيد|حدود|ممتلئ/i.test(t)) {
+    return "حد استخدام Groq ممتلئ مؤقتاً أو المفتاح غير صالح. تحقق من الإعدادات ثم أعد المحاولة.";
+  }
+  if (/MODEL|browser_search|نموذج Groq|أداة البحث/i.test(t)) {
+    return "تعذر إكمال البحث أو النموذج. تأكد أن MODEL=openai/gpt-oss-20b ثم أعد المحاولة.";
   }
   if (/401|كلمة السر|password|needPassword/i.test(t)) {
     return "كلمة المرور غير صحيحة.";
@@ -211,7 +214,7 @@ async function sendChat(text, { approved } = {}) {
   setStatus("busy", "يعمل");
   showPending(null);
 
-  const thinking = addMessage({ text: "أخطط للمهمة وأنفّذ الخطوات…", who: "ai" });
+  const thinking = addMessage({ text: "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.", who: "ai" });
 
   try {
     const memory = loadState().memory || {};
