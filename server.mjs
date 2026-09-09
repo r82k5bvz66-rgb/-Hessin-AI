@@ -25,7 +25,7 @@ app.post("/api/chat", async (req, res) => {
     if (!message) return res.status(400).json({ error: "اكتب رسالتك أولاً." });
 
     const response = await client.responses.create({
-      model: process.env.MODEL || "gpt-4.1-mini",
+     model: process.env.MODEL || "gpt-4.1-mini",
       instructions,
       tools: [{ type: "web_search" }],
       input: message
