@@ -11,6 +11,14 @@ const app = express();
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.use(express.json({ limit: "2mb" }));
+app.use((_req, res, next) => {
+  const orig = res.json.bind(res);
+  res.json = (body) => {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    return orig(body);
+  };
+  next();
+});
 app.use(express.static(__dirname));
 
 function accessOk(req) {
@@ -332,7 +340,7 @@ app.post("/api/chat", async (req, res) => {
     const message = String(req.body?.message || "").trim();
     const sessionId = String(req.body?.sessionId || "default");
     const approved = Boolean(req.body?.approved);
-    if (!message) return res.status(400).json({ error: "اكتب رسالتك أولاً." });
+    if (!message) return res.status(400).json({ error: "اكتب رسالتك أو مهمتك أولاً." });
 
     const session = getSession(sessionId);
     mergeMemory(session, req.body?.memory);
@@ -344,7 +352,7 @@ app.post("/api/chat", async (req, res) => {
         memory: session.memory,
         files: [],
         pending: session.pending,
-        version: "2.1.0"
+        version: "2.2.0"
       });
     }
     const steps = [];
@@ -416,15 +424,15 @@ app.post("/api/chat", async (req, res) => {
       memory: session.memory,
       files,
       pending: session.pending,
-      version: "2.1.0"
+      version: "2.2.0"
     });
   } catch (error) {
     console.error(error);
     const detail = error?.message || "حدث خطأ في الخادم.";
     res.status(500).json({
       error: detail.includes("429") || /quota|billing|insufficient/i.test(detail)
-        ? "رصيد OpenAI API صفر أو غير كافٍ. أضف رصيداً ثم أعد المحاولة."
-        : "حدث خطأ في الخادم. تحقق من المفتاح والنموذج والرصيد."
+        ? "رصيد OpenAI غير كافٍ أو منتهٍ. أضِف رصيداً من لوحة الفوترة ثم أعد المحاولة."
+        : "حدث خطأ في الخادم. تحقق من مفتاح OpenAI والنموذج والرصيد ثم أعد المحاولة."
     });
   }
 });
@@ -433,7 +441,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "Hessin AI",
-    version: "2.1.0",
+    version: "2.2.0",
     hasKey: Boolean(process.env.OPENAI_API_KEY),
     passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD)
   });

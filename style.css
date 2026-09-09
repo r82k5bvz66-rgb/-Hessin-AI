@@ -41,3 +41,7 @@ textarea{flex:1;background:transparent;color:white;border:0;outline:0;resize:non
 button#send{border:0;border-radius:13px;padding:0 18px;min-height:42px;background:#5f5af6;color:white;font-weight:700;cursor:pointer}
 button#send:disabled{opacity:0.55;cursor:not-allowed}
 @media(max-width:600px){.app{padding:10px}.msg{max-width:94%}button#send{padding:0 14px}.header-actions{gap:6px}}
+
+.hints{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.hint{border:1px solid #283247;background:#111726;color:#c9d4ea;border-radius:999px;padding:7px 12px;font-size:12px;cursor:pointer}
+.hint:hover{border-color:#4a5d8a;color:#fff}

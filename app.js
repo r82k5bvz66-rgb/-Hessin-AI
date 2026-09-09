@@ -5,9 +5,16 @@ const send = document.getElementById("send");
 const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
+const hintsEl = document.getElementById("hints");
 
 const STORAGE_KEY = "hessin-ai-v2";
-const WELCOME = "مرحباً. اطلب مني البحث أو الحساب أو كتابة محتوى.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك متعدد الخطوات.\nاطلب مني البحث، الحساب، متابعة التجارة، أو جديد الذكاء الاصطناعي — وأنا أقسّم المهمة وأنفّذها.";
+
+const HINTS = [
+  { label: "تجارة اليوم", text: "لخّص أهم تطورات التجارة العالمية اليوم باختصار عملي" },
+  { label: "AI اليوم", text: "ما أحدث تقنيات وأخبار الذكاء الاصطناعي اليوم؟" },
+  { label: "احسب", text: "احسب لي: " }
+];
 
 function sessionId() {
   let id = localStorage.getItem("hessin-session-id");
@@ -26,7 +33,7 @@ function loadState() {
   }
 }
 
-function saveState( partial) {
+function saveState(partial) {
   const next = { ...loadState(), ...partial };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
@@ -54,6 +61,20 @@ function renderMarkdown(text) {
   s = s.replace(/(?:<li>.*<\/li>\n?)+/g, (block) => "<ul>" + block + "</ul>");
   s = s.replace(/\n/g, "<br>");
   return s;
+}
+
+function friendlyError(raw) {
+  const t = String(raw || "");
+  if (/quota|billing|insufficient|رصيد|صفر/i.test(t)) {
+    return "رصيد OpenAI غير كافٍ أو منتهٍ. أضِف رصيداً من لوحة OpenAI ثم أعد المحاولة.";
+  }
+  if (/401|كلمة السر|password|needPassword/i.test(t)) {
+    return "كلمة المرور غير صحيحة.";
+  }
+  if (/network|Failed to fetch|تعذر الاتصال/i.test(t)) {
+    return "تعذّر الاتصال بالخادم. تحقق من الإنترنت ثم أعد المحاولة.";
+  }
+  return t || "حدث خطأ غير متوقع. حاول مرة أخرى.";
 }
 
 function addMessage({ text, who, steps, files, error }) {
@@ -131,6 +152,23 @@ function resizeInput() {
   input.style.height = Math.min(input.scrollHeight, 160) + "px";
 }
 
+function renderHints() {
+  hintsEl.innerHTML = "";
+  for (const h of HINTS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hint";
+    b.textContent = h.label;
+    b.onclick = () => {
+      input.value = h.text;
+      resizeInput();
+      input.focus();
+      if (h.label !== "احسب") sendChat(h.text);
+    };
+    hintsEl.appendChild(b);
+  }
+}
+
 function showPending(pending) {
   if (!pending || !pending.action) {
     pendingEl.classList.add("hidden");
@@ -173,13 +211,13 @@ async function sendChat(text, { approved } = {}) {
   setStatus("busy", "يعمل");
   showPending(null);
 
-  const thinking = addMessage({ text: "أفكر في المهمة…", who: "ai" });
+  const thinking = addMessage({ text: "أخطط للمهمة وأنفّذ الخطوات…", who: "ai" });
 
   try {
     const memory = loadState().memory || {};
     const r = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         message,
         sessionId: sessionId(),
@@ -190,7 +228,7 @@ async function sendChat(text, { approved } = {}) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       thinking.root.classList.add("error");
-      thinking.body.textContent = data.error || "حدث خطأ.";
+      thinking.body.textContent = friendlyError(data.error);
       setStatus("error", "خطأ");
     } else {
       thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت الخطوات، لكن لم يصل رد نصي.");
@@ -222,9 +260,9 @@ async function sendChat(text, { approved } = {}) {
       showPending(data.pending);
       setStatus("ready", "جاهز");
     }
-  } catch {
+  } catch (err) {
     thinking.root.classList.add("error");
-    thinking.body.textContent = "تعذر الاتصال بالخادم.";
+    thinking.body.textContent = friendlyError(err && err.message ? err.message : "تعذر الاتصال بالخادم.");
     setStatus("error", "خطأ");
   } finally {
     send.disabled = false;
@@ -260,5 +298,6 @@ clearBtn.addEventListener("click", () => {
 });
 
 restoreChat();
+renderHints();
 resizeInput();
 input.focus();
