@@ -8,7 +8,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const groqKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+const client = new OpenAI({
+  apiKey: groqKey,
+  baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"
+});
+
+const MODEL = process.env.MODEL || process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -158,102 +165,166 @@ function safeEvalMath(expr) {
   return result;
 }
 
+async function webSearch(query) {
+  const q = String(query || "").trim();
+  if (!q) return { ok: false, error: "استعلام فارغ." };
+  try {
+    const url = "https://api.duckduckgo.com/?q=" + encodeURIComponent(q) + "&format=json&no_html=1&skip_disambig=1";
+    const r = await fetch(url, { headers: { "User-Agent": "HessinAI/2.5" } });
+    const data = await r.json();
+    const related = Array.isArray(data.RelatedTopics) ? data.RelatedTopics : [];
+    const snippets = [];
+    if (data.AbstractText) snippets.push(data.AbstractText);
+    for (const item of related.slice(0, 5)) {
+      if (item.Text) snippets.push(item.Text);
+      if (item.Topics) {
+        for (const t of item.Topics.slice(0, 2)) {
+          if (t.Text) snippets.push(t.Text);
+        }
+      }
+    }
+    return {
+      ok: true,
+      query: q,
+      heading: data.Heading || "",
+      abstract: data.AbstractText || "",
+      source: data.AbstractURL || "",
+      snippets: snippets.slice(0, 8)
+    };
+  } catch (err) {
+    return { ok: false, error: err?.message || "تعذر البحث." };
+  }
+}
+
 const tools = [
-  { type: "web_search" },
   {
     type: "function",
-    name: "calculator",
-    description: "تنفيذ عملية حسابية دقيقة للنسب والكميات والأرباح.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        expression: { type: "string", description: "تعبير حسابي مثل (300/12)*1.35" },
-        note: { type: "string", description: "شرح مختصر للحساب" }
-      },
-      required: ["expression"]
-    }
-  },
-  {
-    type: "function",
-    name: "memory_save",
-    description: "حفظ معلومة مهمة في ذاكرة الجلسة.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        key: { type: "string" },
-        value: { type: "string" }
-      },
-      required: ["key", "value"]
-    }
-  },
-  {
-    type: "function",
-    name: "memory_read",
-    description: "قراءة الذاكرة الحالية أو مفتاح محدد.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        key: { type: "string" }
+    function: {
+      name: "web_search",
+      description: "بحث ويب سريع عن أخبار أو معلومات حديثة.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string", description: "عبارة البحث" }
+        },
+        required: ["query"]
       }
     }
   },
   {
     type: "function",
-    name: "memory_delete",
-    description: "حذف معلومة من ذاكرة المستخدم.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        key: { type: "string" }
-      },
-      required: ["key"]
+    function: {
+      name: "calculator",
+      description: "تنفيذ عملية حسابية دقيقة للنسب والكميات والأرباح.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          expression: { type: "string", description: "تعبير حسابي مثل (300/12)*1.35" },
+          note: { type: "string", description: "شرح مختصر للحساب" }
+        },
+        required: ["expression"]
+      }
     }
   },
   {
     type: "function",
-    name: "create_file",
-    description: "إنشاء ملف نصي أو خطة أو تقرير داخل الجلسة ليتمكن المستخدم من تنزيله.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        filename: { type: "string" },
-        content: { type: "string" }
-      },
-      required: ["filename", "content"]
+    function: {
+      name: "memory_save",
+      description: "حفظ معلومة مهمة في ذاكرة الجلسة.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          key: { type: "string" },
+          value: { type: "string" }
+        },
+        required: ["key", "value"]
+      }
     }
   },
   {
     type: "function",
-    name: "list_files",
-    description: "عرض الملفات المنشأة في هذه الجلسة.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {}
+    function: {
+      name: "memory_read",
+      description: "قراءة الذاكرة الحالية أو مفتاح محدد.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          key: { type: "string" }
+        }
+      }
     }
   },
   {
     type: "function",
-    name: "request_approval",
-    description: "طلب موافقة المستخدم قبل أي إجراء حساس مثل شراء أو نشر أو إرسال أو حذف.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        action: { type: "string" },
-        reason: { type: "string" }
-      },
-      required: ["action"]
+    function: {
+      name: "memory_delete",
+      description: "حذف معلومة من ذاكرة المستخدم.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          key: { type: "string" }
+        },
+        required: ["key"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_file",
+      description: "إنشاء ملف نصي أو خطة أو تقرير داخل الجلسة ليتمكن المستخدم من تنزيله.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          filename: { type: "string" },
+          content: { type: "string" }
+        },
+        required: ["filename", "content"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_files",
+      description: "عرض الملفات المنشأة في هذه الجلسة.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {}
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "request_approval",
+      description: "طلب موافقة المستخدم قبل أي إجراء حساس مثل شراء أو نشر أو إرسال أو حذف.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          action: { type: "string" },
+          reason: { type: "string" }
+        },
+        required: ["action"]
+      }
     }
   }
 ];
 
 async function runTool(name, args, session) {
+  if (name === "web_search") {
+    const result = await webSearch(args.query);
+    session.log.push({ type: "search", query: args.query });
+    return result;
+  }
   if (name === "calculator") {
     const value = safeEvalMath(args.expression);
     session.log.push({ type: "calc", expression: args.expression, value });
@@ -296,21 +367,7 @@ async function runTool(name, args, session) {
   return { ok: false, error: "أداة غير معروفة." };
 }
 
-function collectFunctionCalls(response) {
-  const items = Array.isArray(response.output) ? response.output : [];
-  const calls = [];
-  for (const item of items) {
-    if (item.type === "function_call") calls.push(item);
-    if (Array.isArray(item.content)) {
-      for (const part of item.content) {
-        if (part.type === "function_call") calls.push(part);
-      }
-    }
-  }
-  return calls;
-}
-
-const instructions = `أنت Hessin AI 2.4.1، وكيل شخصي متعدد الخطوات لصاحب الحساب.
+const instructions = `أنت Hessin AI 2.5، وكيل شخصي متعدد الخطوات لصاحب الحساب (يعمل عبر Groq).
 تحدث بالعربية الفصحى الواضحة افتراضياً، مع لمسة سودانية خفيفة ودّية عندما يناسب السياق (بدون مبالغة أو ألفاظ مبهمة).
 اهتم بتطور التجارة العالمية يومياً، خصوصاً ما يمس السودان والمنطقة والإمداد والأسعار والفرص العملية للتجار.
 استخدم الذاكرة الشخصية دائماً إذا كانت موجودة. لا تنسَ التفضيلات أو المشاريع أو الميزانية المحفوظة.
@@ -324,7 +381,7 @@ const instructions = `أنت Hessin AI 2.4.1، وكيل شخصي متعدد ال
 5) إنشاء ملف إذا طلب المستخدم تقريراً
 6) نتيجة نهائية مرتبة
 
-ابحث بالويب فورًا عندما يطلب المستخدم بحثًا أو أخبارًا أو أسعارًا حديثة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
+ابحث بالويب فورًا عبر أداة web_search عندما يطلب المستخدم بحثًا أو أخبارًا أو أسعارًا حديثة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
 اطلب موافقة عبر request_approval فقط قبل شراء أو نشر أو إرسال رسائل أو حذف أو تغيير صلاحيات.
 لا تطلب مفتاح API من المستخدم. لا تكشف الأسرار.
 إذا نقصت بيانات، اذكر الافتراضات بوضوح.
@@ -357,13 +414,24 @@ const instructions = `أنت Hessin AI 2.4.1، وكيل شخصي متعدد ال
 أسلوب الرد: فصحى واضحة، والسوداني إذا تكلم صاحب الحساب بالسوداني.
 عند أول فرصة مناسبة احفظ ملخص هذه القواعد في الذاكرة بالمفتاح user_protection عبر memory_save.`;
 
+const toolLabels = {
+  web_search: "بحث على الويب",
+  calculator: "حساب دقيق",
+  memory_save: "حفظ في الذاكرة",
+  memory_read: "قراءة الذاكرة",
+  memory_delete: "حذف من الذاكرة",
+  create_file: "إنشاء ملف",
+  list_files: "عرض الملفات",
+  request_approval: "طلب موافقة"
+};
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!accessOk(req)) {
       return res.status(401).json({ error: "كلمة السر غير صحيحة.", needPassword: true });
     }
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "مفتاح OpenAI غير موجود في إعدادات السيرفر." });
+    if (!groqKey) {
+      return res.status(500).json({ error: "مفتاح Groq غير موجود. أضف GROQ_API_KEY في إعدادات Vercel." });
     }
 
     const message = String(req.body?.message || "").trim();
@@ -384,7 +452,8 @@ app.post("/api/chat", async (req, res) => {
         memory: session.memory,
         files: [],
         pending: session.pending,
-        version: "2.4.1"
+        version: "2.5.0",
+        provider: "groq"
       });
     }
     const steps = [];
@@ -395,62 +464,66 @@ app.post("/api/chat", async (req, res) => {
       session.pending = null;
     }
 
-    const input = [
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: [
-              message,
-              approved ? "المستخدم وافق على الإجراء المعلق إن وجد." : "",
-              /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء)/i.test(message)
-                ? "هذا طلب موجز يومي لتقنيات وأخبار الذكاء الاصطناعي. استخدم البحث وأعد 3-5 نقاط عملية."
-                : "",
-              /(?:تجارة اليوم|التجارة العالمية|أسواق اليوم)/i.test(message)
-                ? "هذا طلب موجز يومي لتطور التجارة العالمية مع أثر عملي، ويفضّل ربطه بالسودان/الجوار إن أمكن."
-                : "",
-              Object.keys(session.memory).length
-                ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}`
-                : ""
-            ].filter(Boolean).join("\n")
-          }
-        ]
-      }
+    const userBits = [
+      message,
+      approved ? "المستخدم وافق على الإجراء المعلق إن وجد." : "",
+      /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء)/i.test(message)
+        ? "هذا طلب موجز يومي لتقنيات وأخبار الذكاء الاصطناعي. استخدم البحث وأعد 3-5 نقاط عملية."
+        : "",
+      /(?:تجارة اليوم|التجارة العالمية|أسواق اليوم)/i.test(message)
+        ? "هذا طلب موجز يومي لتطور التجارة العالمية مع أثر عملي، ويفضّل ربطه بالسودان/الجوار إن أمكن."
+        : "",
+      Object.keys(session.memory).length
+        ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}`
+        : ""
+    ].filter(Boolean).join("\n");
+
+    const messages = [
+      { role: "system", content: instructions },
+      { role: "user", content: userBits }
     ];
 
-    let response = await client.responses.create({
-      model: process.env.MODEL || "gpt-5.6-luna",
-      instructions,
-      tools,
-      input
-    });
-
+    let finalText = "";
     for (let i = 0; i < 10; i++) {
-      const calls = collectFunctionCalls(response);
-      if (!calls.length) break;
+      const completion = await client.chat.completions.create({
+        model: MODEL,
+        messages,
+        tools,
+        tool_choice: "auto",
+        temperature: 0.4
+      });
 
-      const outputs = [];
-      for (const call of calls) {
-        let args = {};
-        try { args = JSON.parse(call.arguments || "{}"); } catch { args = {}; }
-        const toolLabels = { web_search: "بحث على الويب", calculator: "حساب دقيق", memory_save: "حفظ في الذاكرة", memory_read: "قراءة الذاكرة", memory_delete: "حذف من الذاكرة", create_file: "إنشاء ملف", list_files: "عرض الملفات", request_approval: "طلب موافقة" };
-        steps.push({ type: "tool", text: toolLabels[call.name] || ("تنفيذ: " + call.name) });
-        const result = await runTool(call.name, args, session);
-        outputs.push({
-          type: "function_call_output",
-          call_id: call.call_id,
-          output: JSON.stringify(result)
-        });
+      const choice = completion.choices?.[0];
+      const msg = choice?.message;
+      if (!msg) {
+        finalText = "اكتملت الخطوات، لكن لم يصل رد نصي.";
+        break;
       }
 
-      response = await client.responses.create({
-        model: process.env.MODEL || "gpt-5.6-luna",
-        instructions,
-        tools,
-        input: outputs,
-        previous_response_id: response.id
+      const toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+      if (!toolCalls.length) {
+        finalText = msg.content || "اكتملت الخطوات، لكن لم يصل رد نصي.";
+        break;
+      }
+
+      messages.push({
+        role: "assistant",
+        content: msg.content || null,
+        tool_calls: toolCalls
       });
+
+      for (const call of toolCalls) {
+        const name = call.function?.name || "";
+        let args = {};
+        try { args = JSON.parse(call.function?.arguments || "{}"); } catch { args = {}; }
+        steps.push({ type: "tool", text: toolLabels[name] || `تنفيذ: ${name}` });
+        const result = await runTool(name, args, session);
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify(result)
+        });
+      }
     }
 
     const files = Object.entries(session.files).map(([name, content]) => ({
@@ -459,20 +532,22 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     res.json({
-      text: response.output_text || "اكتملت الخطوات، لكن لم يصل رد نصي.",
+      text: finalText || "اكتملت الخطوات، لكن لم يصل رد نصي.",
       steps,
       memory: session.memory,
       files,
       pending: session.pending,
-      version: "2.4.1"
+      version: "2.5.0",
+      provider: "groq"
     });
   } catch (error) {
     console.error(error);
     const detail = error?.message || "حدث خطأ في الخادم.";
+    const quota = detail.includes("429") || /quota|billing|insufficient|rate limit/i.test(detail);
     res.status(500).json({
-      error: detail.includes("429") || /quota|billing|insufficient/i.test(detail)
-        ? "رصيد OpenAI غير كافٍ أو منتهٍ. أضِف رصيداً من لوحة الفوترة ثم أعد المحاولة."
-        : "حدث خطأ في الخادم. تحقق من مفتاح OpenAI والنموذج والرصيد ثم أعد المحاولة."
+      error: quota
+        ? "حد استخدام Groq ممتلئ مؤقتاً أو المفتاح غير صالح. تحقق من GROQ_API_KEY والرصيد/الحدود ثم أعد المحاولة."
+        : "حدث خطأ في الخادم. تحقق من مفتاح Groq والنموذج ثم أعد المحاولة."
     });
   }
 });
@@ -481,8 +556,10 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "Hessin AI",
-    version: "2.4.1",
-    hasKey: Boolean(process.env.OPENAI_API_KEY),
+    version: "2.5.0",
+    provider: "groq",
+    model: MODEL,
+    hasKey: Boolean(groqKey),
     passwordRequired: Boolean(process.env.HESSIN_ACCESS_PASSWORD)
   });
 });
@@ -492,6 +569,6 @@ export default app;
 if (!process.env.VERCEL) {
   const port = process.env.PORT || 3000;
   app.listen(port, () => {
-    console.log(`Hessin AI 2.0 running at http://localhost:${port}`);
+    console.log(`Hessin AI 2.5 (Groq) running at http://localhost:${port}`);
   });
 }
