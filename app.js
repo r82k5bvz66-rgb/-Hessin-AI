@@ -5,54 +5,13 @@ const send = document.getElementById("send");
 const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
-const hintsEl = document.getElementById("hints");
 const memoryBanner = document.getElementById("memoryBanner");
 
 const STORAGE_KEY = "hessin-ai-v2";
 const MEMORY_KEY = "hessin-ai-memory";
 
-const DIGEST_DAY_KEY = "hessin-daily-digest-day";
 
-function cairoDayKey() {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
-}
-
-function maybeOfferDailyDigest() {
-  const day = cairoDayKey();
-  if (localStorage.getItem(DIGEST_DAY_KEY) === day) return;
-  const offer = document.getElementById("digestOffer");
-  if (!offer) return;
-  offer.classList.remove("hidden");
-  const yes = document.getElementById("digestYes");
-  const no = document.getElementById("digestSkip");
-  if (yes) {
-    yes.onclick = () => {
-      localStorage.setItem(DIGEST_DAY_KEY, day);
-      offer.classList.add("hidden");
-      sendChat("ملخص يومي");
-    };
-  }
-  if (no) {
-    no.onclick = () => {
-      localStorage.setItem(DIGEST_DAY_KEY, day);
-      offer.classList.add("hidden");
-    };
-  }
-}
-
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nجرّب «ملخص يومي» لموجز التجارة والذكاء الاصطناعي والأسعار في رد واحد.";
-
-const HINTS = [
-  { label: "ملخص يومي", text: "ملخص يومي" },
-  { label: "تجارة اليوم", text: "تجارة اليوم" },
-  { label: "AI اليوم", text: "AI اليوم" },
-  { label: "تقرير أسعار", text: "تقرير أسعار" },
-  { label: "ماذا تعرف عني", text: "ماذا تعرف عني" }
-];
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب مهمتك مباشرة في المربع. الأوامر مثل تجارة اليوم أو تقرير أسعار تعمل بالكتابة.";
 
 function sessionId() {
   let id = localStorage.getItem("hessin-session-id");
@@ -224,22 +183,6 @@ function resizeInput() {
   input.style.height = Math.min(input.scrollHeight, 140) + "px";
 }
 
-function renderHints() {
-  hintsEl.innerHTML = "";
-  for (const h of HINTS) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "hint";
-    b.textContent = h.label;
-    b.onclick = () => {
-      input.value = h.text;
-      resizeInput();
-      sendChat(h.text);
-    };
-    hintsEl.appendChild(b);
-  }
-}
-
 function showPending(pending) {
   if (!pending || !pending.action) {
     pendingEl.classList.add("hidden");
@@ -273,11 +216,6 @@ function showPending(pending) {
 async function sendChat(text, { approved } = {}) {
   const message = String(text || "").trim();
   if (!message) return;
-  if (/^(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(message)) {
-    localStorage.setItem(DIGEST_DAY_KEY, cairoDayKey());
-    const offer = document.getElementById("digestOffer");
-    if (offer) offer.classList.add("hidden");
-  }
 
   addMessage({ text: message, who: "user" });
   input.value = "";
@@ -385,9 +323,7 @@ if (restoredMemory && Object.keys(restoredMemory).length) {
   saveMemory(restoredMemory);
 }
 restoreChat();
-renderHints();
 showMemoryRestored(restoredMemory);
 resizeInput();
 input.focus();
 
-maybeOfferDailyDigest();
