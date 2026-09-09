@@ -5,10 +5,25 @@ const send = document.getElementById("send");
 const approvalBox = document.getElementById("approval");
 const approvalText = document.getElementById("approvalText");
 const approveBtn = document.getElementById("approve");
+const lock = document.getElementById("lock");
+const passInput = document.getElementById("pass");
+const unlockBtn = document.getElementById("unlock");
 
 const sessionId = localStorage.getItem("hessin_session") || crypto.randomUUID();
 localStorage.setItem("hessin_session", sessionId);
 let lastUserMessage = "";
+
+function loadMemory() {
+  try { return JSON.parse(localStorage.getItem("hessin_memory") || "{}"); }
+  catch { return {}; }
+}
+function saveMemory(memory) {
+  localStorage.setItem("hessin_memory", JSON.stringify(memory || {}));
+}
+function getPass() { return localStorage.getItem("hessin_pass") || ""; }
+function setPass(value) { localStorage.setItem("hessin_pass", value); }
+
+if (getPass()) lock.classList.add("hidden");
 
 function add(text, who) {
   const d = document.createElement("div");
@@ -32,7 +47,6 @@ function addSteps(steps) {
   box.className = "steps";
   box.textContent = steps.map((s) => "• " + s.text).join("\n");
   chat.appendChild(box);
-  chat.scrollTop = chat.scrollHeight;
 }
 
 function addFiles(files) {
@@ -56,9 +70,21 @@ async function run(message, approved = false) {
     const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, sessionId, approved })
+      body: JSON.stringify({
+        message,
+        sessionId,
+        approved,
+        memory: loadMemory(),
+        password: getPass()
+      })
     });
     const data = await r.json();
+    if (data.needPassword) {
+      lock.classList.remove("hidden");
+      thinking.textContent = "أدخل كلمة السر أولًا.";
+      return;
+    }
+    if (data.memory) saveMemory(data.memory);
     thinking.textContent = data.text || data.error || "حدث خطأ.";
     addSteps(data.steps);
     addFiles(data.files);
@@ -76,6 +102,14 @@ async function run(message, approved = false) {
     input.focus();
   }
 }
+
+unlockBtn.addEventListener("click", () => {
+  const value = passInput.value.trim();
+  if (!value) return;
+  setPass(value);
+  lock.classList.add("hidden");
+  passInput.value = "";
+});
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
