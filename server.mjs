@@ -49,42 +49,42 @@ function mergeMemory(session, incoming) {
 
 function formatMemory(memory) {
   const entries = Object.entries(memory || {});
-  if (!entries.length) return "ÙØ§ ØªÙØ¬Ø¯ ÙØ¹ÙÙÙØ§Øª ÙØ­ÙÙØ¸Ø© Ø¹ÙÙ Ø¨Ø¹Ø¯.";
+  if (!entries.length) return "لا توجد معلومات محفوظة عنك بعد.";
   return entries.map(([key, value]) => `- ${key}: ${value}`).join("\n");
 }
 
 function handleMemoryCommand(message, session) {
   const text = message.trim();
-  const learn = text.match(/^(?:ØªØ¹ÙÙ ÙØ°Ø§|ØªØ¹ÙÙÙ ÙØ°Ø§|Ø§Ø­ÙØ¸)\s*[:ï¼-]?\s*(.+)$/i);
+  const learn = text.match(/^(?:تعلم هذا|تعلّم هذا|احفظ)\s*[:：-]?\s*(.+)$/i);
   if (learn) {
     const payload = learn[1].trim();
-    const parts = payload.split(/[=:ï¼]/);
-    const key = parts.length > 1 ? parts[0].trim() : "ÙÙØ§Ø­Ø¸Ø©";
+    const parts = payload.split(/[=:：]/);
+    const key = parts.length > 1 ? parts[0].trim() : "ملاحظة";
     const value = parts.length > 1 ? parts.slice(1).join(":").trim() : payload;
     session.memory[key] = value;
     session.log.push({ type: "memory", key });
     return {
-      text: `ØªÙ Ø§ÙØ­ÙØ¸.\n- ${key}: ${value}`,
-      steps: [{ type: "memory", text: `Ø­ÙØ¸: ${key}` }]
+      text: `تم الحفظ.\n- ${key}: ${value}`,
+      steps: [{ type: "memory", text: `حفظ: ${key}` }]
     };
   }
 
-  if (/^(ÙØ§Ø°Ø§ ØªØ¹Ø±Ù Ø¹ÙÙ|ÙØ§ Ø§ÙØ°Ù ØªØ¹Ø±ÙÙ Ø¹ÙÙ|Ø°Ø§ÙØ±ØªÙ|Ø¹Ø±Ø¶ Ø§ÙØ°Ø§ÙØ±Ø©)\s*[Ø?]?$/i.test(text)) {
+  if (/^(ماذا تعرف عني|ما الذي تعرفه عني|ذاكرتي|عرض الذاكرة)\s*[؟?]?$/i.test(text)) {
     return {
-      text: "ÙØ°Ø§ ÙØ§ Ø£Ø¹Ø±ÙÙ Ø¹ÙÙ Ø­ØªÙ Ø§ÙØ¢Ù:\n" + formatMemory(session.memory),
-      steps: [{ type: "memory", text: "ÙØ±Ø§Ø¡Ø© Ø§ÙØ°Ø§ÙØ±Ø©" }]
+      text: "هذا ما أعرفه عنك حتى الآن:\n" + formatMemory(session.memory),
+      steps: [{ type: "memory", text: "قراءة الذاكرة" }]
     };
   }
 
-  if (/^(Ø£Ø¹Ø·ÙÙ Ø±ÙØ² Ø§ÙØ°Ø§ÙØ±Ø©|Ø±ÙØ² Ø§ÙØ°Ø§ÙØ±Ø©|ØµØ¯ÙØ± Ø§ÙØ°Ø§ÙØ±Ø©|ØµØ¯Ø± Ø§ÙØ°Ø§ÙØ±Ø©)$/i.test(text)) {
+  if (/^(أعطني رمز الذاكرة|رمز الذاكرة|صدّر الذاكرة|صدر الذاكرة)$/i.test(text)) {
     const token = Buffer.from(JSON.stringify(session.memory), "utf8").toString("base64");
     return {
-      text: "Ø§ÙØ³Ø® ÙØ°Ø§ Ø§ÙØ±ÙØ² ÙØ§ÙØªØ­Ù Ø¹ÙÙ Ø§ÙÙØ§ØªÙ Ø§ÙØ¢Ø®Ø± Ø«Ù Ø§ÙØªØ¨:\nØ§Ø³ØªÙØ±Ø¯ Ø§ÙØ°Ø§ÙØ±Ø©: " + token,
-      steps: [{ type: "memory", text: "ØªØµØ¯ÙØ± Ø§ÙØ°Ø§ÙØ±Ø©" }]
+      text: "انسخ هذا الرمز وافتحه على الهاتف الآخر ثم اكتب:\nاستورد الذاكرة: " + token,
+      steps: [{ type: "memory", text: "تصدير الذاكرة" }]
     };
   }
 
-  const imported = text.match(/^(?:Ø§Ø³ØªÙØ±Ø¯ Ø§ÙØ°Ø§ÙØ±Ø©|Ø§Ø³ØªÙØ±Ø§Ø¯ Ø§ÙØ°Ø§ÙØ±Ø©)\s*[:ï¼-]?\s*(.+)$/i);
+  const imported = text.match(/^(?:استورد الذاكرة|استيراد الذاكرة)\s*[:：-]?\s*(.+)$/i);
   if (imported) {
     try {
       const parsed = JSON.parse(Buffer.from(imported[1].trim(), "base64").toString("utf8"));
@@ -92,47 +92,47 @@ function handleMemoryCommand(message, session) {
       session.memory = {};
       mergeMemory(session, parsed);
       return {
-        text: "ØªÙ Ø§Ø³ØªÙØ±Ø§Ø¯ Ø§ÙØ°Ø§ÙØ±Ø© Ø¹ÙÙ ÙØ°Ø§ Ø§ÙØ¬ÙØ§Ø².\n" + formatMemory(session.memory),
-        steps: [{ type: "memory", text: "Ø§Ø³ØªÙØ±Ø§Ø¯ Ø§ÙØ°Ø§ÙØ±Ø©" }]
+        text: "تم استيراد الذاكرة على هذا الجهاز.\n" + formatMemory(session.memory),
+        steps: [{ type: "memory", text: "استيراد الذاكرة" }]
       };
     } catch {
       return {
-        text: "Ø±ÙØ² Ø§ÙØ°Ø§ÙØ±Ø© ØºÙØ± ØµØ­ÙØ­.",
-        steps: [{ type: "memory", text: "ÙØ´Ù Ø§ÙØ§Ø³ØªÙØ±Ø§Ø¯" }]
+        text: "رمز الذاكرة غير صحيح.",
+        steps: [{ type: "memory", text: "فشل الاستيراد" }]
       };
     }
   }
 
-  const forgetAll = /^(Ø§ÙØ³Ù ÙÙ Ø´ÙØ¡|Ø§ÙØ³ ÙÙ Ø´ÙØ¡|Ø§ÙØ³Ø­ Ø§ÙØ°Ø§ÙØ±Ø©)$/i.test(text);
+  const forgetAll = /^(انسى كل شيء|انس كل شيء|امسح الذاكرة)$/i.test(text);
   if (forgetAll) {
     session.memory = {};
     return {
-      text: "ØªÙ ÙØ³ÙØ§Ù ÙÙ Ø§ÙÙØ¹ÙÙÙØ§Øª Ø§ÙÙØ­ÙÙØ¸Ø© Ø¹ÙÙ ÙØ°Ø§ Ø§ÙØ¬ÙØ§Ø².",
-      steps: [{ type: "memory", text: "ÙØ³Ø­ Ø§ÙØ°Ø§ÙØ±Ø©" }]
+      text: "تم نسيان كل المعلومات المحفوظة على هذا الجهاز.",
+      steps: [{ type: "memory", text: "مسح الذاكرة" }]
     };
   }
 
-  const forget = text.match(/^(?:Ø§ÙØ³Ù|Ø§ÙØ³)\s*[:ï¼-]?\s*(.+)$/i);
+  const forget = text.match(/^(?:انسى|انس)\s*[:：-]?\s*(.+)$/i);
   if (forget) {
     const key = forget[1].trim();
     if (session.memory[key] != null) {
       delete session.memory[key];
       return {
-        text: `ØªÙ ÙØ³ÙØ§Ù: ${key}`,
-        steps: [{ type: "memory", text: `Ø­Ø°Ù: ${key}` }]
+        text: `تم نسيان: ${key}`,
+        steps: [{ type: "memory", text: `حذف: ${key}` }]
       };
     }
     const match = Object.keys(session.memory).find((item) => item.includes(key) || String(session.memory[item]).includes(key));
     if (match) {
       delete session.memory[match];
       return {
-        text: `ØªÙ ÙØ³ÙØ§Ù: ${match}`,
-        steps: [{ type: "memory", text: `Ø­Ø°Ù: ${match}` }]
+        text: `تم نسيان: ${match}`,
+        steps: [{ type: "memory", text: `حذف: ${match}` }]
       };
     }
     return {
-      text: `ÙÙ Ø£Ø¬Ø¯ ÙÙ Ø§ÙØ°Ø§ÙØ±Ø© Ø´ÙØ¡ Ø¨Ø§Ø³Ù: ${key}`,
-      steps: [{ type: "memory", text: "Ø¨Ø­Ø« ÙÙ Ø§ÙØ°Ø§ÙØ±Ø©" }]
+      text: `لم أجد في الذاكرة شيء باسم: ${key}`,
+      steps: [{ type: "memory", text: "بحث في الذاكرة" }]
     };
   }
 
@@ -141,11 +141,11 @@ function handleMemoryCommand(message, session) {
 
 function safeEvalMath(expr) {
   const cleaned = String(expr).replace(/[^0-9+\-*/().,%\s]/g, "");
-  if (!cleaned.trim()) throw new Error("ØªØ¹Ø¨ÙØ± Ø­Ø³Ø§Ø¨Ù ÙØ§Ø±Øº.");
+  if (!cleaned.trim()) throw new Error("تعبير حسابي فارغ.");
   const normalized = cleaned.replace(/,/g, ".").replace(/%/g, "/100");
   const result = Function(`"use strict"; return (${normalized})`)();
   if (typeof result !== "number" || !Number.isFinite(result)) {
-    throw new Error("ØªØ¹Ø°Ø± Ø­Ø³Ø§Ø¨ Ø§ÙÙØ§ØªØ¬.");
+    throw new Error("تعذر حساب الناتج.");
   }
   return result;
 }
@@ -155,13 +155,13 @@ const tools = [
   {
     type: "function",
     name: "calculator",
-    description: "ØªÙÙÙØ° Ø¹ÙÙÙØ© Ø­Ø³Ø§Ø¨ÙØ© Ø¯ÙÙÙØ© ÙÙÙØ³Ø¨ ÙØ§ÙÙÙÙØ§Øª ÙØ§ÙØ£Ø±Ø¨Ø§Ø­.",
+    description: "تنفيذ عملية حسابية دقيقة للنسب والكميات والأرباح.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
-        expression: { type: "string", description: "ØªØ¹Ø¨ÙØ± Ø­Ø³Ø§Ø¨Ù ÙØ«Ù (300/12)*1.35" },
-        note: { type: "string", description: "Ø´Ø±Ø­ ÙØ®ØªØµØ± ÙÙØ­Ø³Ø§Ø¨" }
+        expression: { type: "string", description: "تعبير حسابي مثل (300/12)*1.35" },
+        note: { type: "string", description: "شرح مختصر للحساب" }
       },
       required: ["expression"]
     }
@@ -169,7 +169,7 @@ const tools = [
   {
     type: "function",
     name: "memory_save",
-    description: "Ø­ÙØ¸ ÙØ¹ÙÙÙØ© ÙÙÙØ© ÙÙ Ø°Ø§ÙØ±Ø© Ø§ÙØ¬ÙØ³Ø©.",
+    description: "حفظ معلومة مهمة في ذاكرة الجلسة.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -183,7 +183,7 @@ const tools = [
   {
     type: "function",
     name: "memory_read",
-    description: "ÙØ±Ø§Ø¡Ø© Ø§ÙØ°Ø§ÙØ±Ø© Ø§ÙØ­Ø§ÙÙØ© Ø£Ù ÙÙØªØ§Ø­ ÙØ­Ø¯Ø¯.",
+    description: "قراءة الذاكرة الحالية أو مفتاح محدد.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -195,7 +195,7 @@ const tools = [
   {
     type: "function",
     name: "memory_delete",
-    description: "Ø­Ø°Ù ÙØ¹ÙÙÙØ© ÙÙ Ø°Ø§ÙØ±Ø© Ø§ÙÙØ³ØªØ®Ø¯Ù.",
+    description: "حذف معلومة من ذاكرة المستخدم.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -208,7 +208,7 @@ const tools = [
   {
     type: "function",
     name: "create_file",
-    description: "Ø¥ÙØ´Ø§Ø¡ ÙÙÙ ÙØµÙ Ø£Ù Ø®Ø·Ø© Ø£Ù ØªÙØ±ÙØ± Ø¯Ø§Ø®Ù Ø§ÙØ¬ÙØ³Ø© ÙÙØªÙÙÙ Ø§ÙÙØ³ØªØ®Ø¯Ù ÙÙ ØªÙØ²ÙÙÙ.",
+    description: "إنشاء ملف نصي أو خطة أو تقرير داخل الجلسة ليتمكن المستخدم من تنزيله.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -222,7 +222,7 @@ const tools = [
   {
     type: "function",
     name: "list_files",
-    description: "Ø¹Ø±Ø¶ Ø§ÙÙÙÙØ§Øª Ø§ÙÙÙØ´Ø£Ø© ÙÙ ÙØ°Ù Ø§ÙØ¬ÙØ³Ø©.",
+    description: "عرض الملفات المنشأة في هذه الجلسة.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -232,7 +232,7 @@ const tools = [
   {
     type: "function",
     name: "request_approval",
-    description: "Ø·ÙØ¨ ÙÙØ§ÙÙØ© Ø§ÙÙØ³ØªØ®Ø¯Ù ÙØ¨Ù Ø£Ù Ø¥Ø¬Ø±Ø§Ø¡ Ø­Ø³Ø§Ø³ ÙØ«Ù Ø´Ø±Ø§Ø¡ Ø£Ù ÙØ´Ø± Ø£Ù Ø¥Ø±Ø³Ø§Ù Ø£Ù Ø­Ø°Ù.",
+    description: "طلب موافقة المستخدم قبل أي إجراء حساس مثل شراء أو نشر أو إرسال أو حذف.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -282,10 +282,10 @@ async function runTool(name, args, session) {
       ok: true,
       needs_approval: true,
       action: args.action,
-      message: "Ø¨Ø§ÙØªØ¸Ø§Ø± ÙÙØ§ÙÙØ© Ø§ÙÙØ³ØªØ®Ø¯Ù ÙØ¨Ù Ø§ÙØªÙÙÙØ°."
+      message: "بانتظار موافقة المستخدم قبل التنفيذ."
     };
   }
-  return { ok: false, error: "Ø£Ø¯Ø§Ø© ØºÙØ± ÙØ¹Ø±ÙÙØ©." };
+  return { ok: false, error: "أداة غير معروفة." };
 }
 
 function collectFunctionCalls(response) {
@@ -302,37 +302,37 @@ function collectFunctionCalls(response) {
   return calls;
 }
 
-const instructions = `Ø£ÙØª Hessin AI 2.1Ø ÙÙÙÙ Ø´Ø®ØµÙ Ø¹Ø§Ù ÙØªØ¹Ø¯Ø¯ Ø§ÙØ®Ø·ÙØ§Øª ÙØµØ§Ø­Ø¨ Ø§ÙØ­Ø³Ø§Ø¨.
-ØªØ­Ø¯Ø« Ø¨Ø§ÙØ¹Ø±Ø¨ÙØ© Ø§ÙØªØ±Ø§Ø¶ÙØ§Ù ÙØ¨Ø£Ø³ÙÙØ¨ ÙØ§Ø¶Ø­ ÙØ¹ÙÙÙ.
-Ø§Ø³ØªØ®Ø¯Ù Ø§ÙØ°Ø§ÙØ±Ø© Ø§ÙØ´Ø®ØµÙØ© Ø¯Ø§Ø¦ÙØ§Ù Ø¥Ø°Ø§ ÙØ§ÙØª ÙÙØ¬ÙØ¯Ø©. ÙØ§ ØªÙØ³Ù Ø§ÙØªÙØ¶ÙÙØ§Øª Ø£Ù Ø§ÙÙØ´Ø§Ø±ÙØ¹ Ø£Ù Ø§ÙÙÙØ²Ø§ÙÙØ© Ø§ÙÙØ­ÙÙØ¸Ø©.
-Ø¥Ø°Ø§ Ø°ÙØ± Ø§ÙÙØ³ØªØ®Ø¯Ù ÙØ¹ÙÙÙØ© Ø«Ø§Ø¨ØªØ© Ø¹Ù ÙÙØ³Ù Ø£Ù ÙØ´Ø±ÙØ¹Ù Ø£Ù Ø£Ø³ÙÙØ¨ÙØ Ø§Ø­ÙØ¸ÙØ§ Ø¹Ø¨Ø± memory_save Ø¨ÙÙØªØ§Ø­ ÙØµÙØ± ÙØ§Ø¶Ø­.
-Ø¥Ø°Ø§ Ø·ÙØ¨ Ø§ÙØªØµØ­ÙØ­Ø Ø§Ø­ÙØ¸ Ø§ÙØªØµØ­ÙØ­ ÙÙØ§ ØªÙØ±Ø± Ø§ÙØºÙØ·.
-ÙØ§ ØªØ¬Ø¨ Ø¥Ø¬Ø§Ø¨Ø© ÙÙØ§Ø¦ÙØ© Ø³Ø±ÙØ¹Ø© ÙÙ Ø§ÙÙÙØ§Ù Ø§ÙÙØ±ÙØ¨Ø©. ÙØ³ÙÙ Ø§ÙØ¹ÙÙ:
-1) ÙÙÙ Ø§ÙÙÙÙØ© ÙØ¹ Ø§ÙØ°Ø§ÙØ±Ø©
-2) Ø¬ÙØ¹ Ø§ÙØ¨ÙØ§ÙØ§Øª Ø¨Ø§ÙØ¨Ø­Ø« Ø¹ÙØ¯ Ø§ÙØ­Ø§Ø¬Ø©
-3) Ø§ÙØ­Ø³Ø§Ø¨ Ø¹ÙØ¯ ÙØ¬ÙØ¯ Ø£Ø±ÙØ§Ù
-4) Ø­ÙØ¸ Ø§ÙÙØªØ§Ø¦Ø¬ Ø§ÙÙÙÙØ© ÙÙ Ø§ÙØ°Ø§ÙØ±Ø©
-5) Ø¥ÙØ´Ø§Ø¡ ÙÙÙ Ø¥Ø°Ø§ Ø·ÙØ¨ Ø§ÙÙØ³ØªØ®Ø¯Ù ØªÙØ±ÙØ±Ø§Ù
-6) ÙØªÙØ¬Ø© ÙÙØ§Ø¦ÙØ© ÙØ±ØªØ¨Ø©
+const instructions = `أنت Hessin AI 2.1، وكيل شخصي عام متعدد الخطوات لصاحب الحساب.
+تحدث بالعربية افتراضياً وبأسلوب واضح وعملي.
+استخدم الذاكرة الشخصية دائماً إذا كانت موجودة. لا تنسَ التفضيلات أو المشاريع أو الميزانية المحفوظة.
+إذا ذكر المستخدم معلومة ثابتة عن نفسه أو مشروعه أو أسلوبه، احفظها عبر memory_save بمفتاح قصير واضح.
+إذا طلب التصحيح، احفظ التصحيح ولا تكرر الغلط.
+لا تجب إجابة نهائية سريعة في المهام المركبة. قسّم العمل:
+1) فهم المهمة مع الذاكرة
+2) جمع البيانات بالبحث عند الحاجة
+3) الحساب عند وجود أرقام
+4) حفظ النتائج المهمة في الذاكرة
+5) إنشاء ملف إذا طلب المستخدم تقريراً
+6) نتيجة نهائية مرتبة
 
-Ø§Ø¨Ø­Ø« Ø¨Ø§ÙÙÙØ¨ ÙÙØ±ÙØ§ Ø¹ÙØ¯ÙØ§ ÙØ·ÙØ¨ Ø§ÙÙØ³ØªØ®Ø¯Ù Ø¨Ø­Ø«ÙØ§ Ø£Ù Ø£Ø®Ø¨Ø§Ø±ÙØ§ Ø£Ù Ø£Ø³Ø¹Ø§Ø±ÙØ§ Ø­Ø¯ÙØ«Ø©. ÙØ§ ØªØ·ÙØ¨ ÙÙØ§ÙÙØ© Ø¹ÙÙ Ø§ÙØ¨Ø­Ø« Ø£Ù Ø§ÙØ­Ø³Ø§Ø¨ Ø£Ù Ø¥ÙØ´Ø§Ø¡ ÙÙÙ ÙØµÙ Ø£Ù Ø­ÙØ¸ Ø§ÙØ°Ø§ÙØ±Ø©.
-Ø§Ø·ÙØ¨ ÙÙØ§ÙÙØ© Ø¹Ø¨Ø± request_approval ÙÙØ· ÙØ¨Ù Ø´Ø±Ø§Ø¡ Ø£Ù ÙØ´Ø± Ø£Ù Ø¥Ø±Ø³Ø§Ù Ø±Ø³Ø§Ø¦Ù Ø£Ù Ø­Ø°Ù Ø£Ù ØªØºÙÙØ± ØµÙØ§Ø­ÙØ§Øª.
-ÙØ§ ØªØ·ÙØ¨ ÙÙØªØ§Ø­ API ÙÙ Ø§ÙÙØ³ØªØ®Ø¯Ù. ÙØ§ ØªÙØ´Ù Ø§ÙØ£Ø³Ø±Ø§Ø±.
-Ø¥Ø°Ø§ ÙÙØµØª Ø¨ÙØ§ÙØ§ØªØ Ø§Ø°ÙØ± Ø§ÙØ§ÙØªØ±Ø§Ø¶Ø§Øª Ø¨ÙØ¶ÙØ­.`;
+ابحث بالويب فورًا عندما يطلب المستخدم بحثًا أو أخبارًا أو أسعارًا حديثة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
+اطلب موافقة عبر request_approval فقط قبل شراء أو نشر أو إرسال رسائل أو حذف أو تغيير صلاحيات.
+لا تطلب مفتاح API من المستخدم. لا تكشف الأسرار.
+إذا نقصت بيانات، اذكر الافتراضات بوضوح.`;
 
 app.post("/api/chat", async (req, res) => {
   try {
     if (!accessOk(req)) {
-      return res.status(401).json({ error: "ÙÙÙØ© Ø§ÙØ³Ø± ØºÙØ± ØµØ­ÙØ­Ø©.", needPassword: true });
+      return res.status(401).json({ error: "كلمة السر غير صحيحة.", needPassword: true });
     }
     if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "ÙÙØªØ§Ø­ OpenAI ØºÙØ± ÙÙØ¬ÙØ¯ ÙÙ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§ÙØ³ÙØ±ÙØ±." });
+      return res.status(500).json({ error: "مفتاح OpenAI غير موجود في إعدادات السيرفر." });
     }
 
     const message = String(req.body?.message || "").trim();
     const sessionId = String(req.body?.sessionId || "default");
     const approved = Boolean(req.body?.approved);
-    if (!message) return res.status(400).json({ error: "Ø§ÙØªØ¨ Ø±Ø³Ø§ÙØªÙ Ø£ÙÙØ§Ù." });
+    if (!message) return res.status(400).json({ error: "اكتب رسالتك أولاً." });
 
     const session = getSession(sessionId);
     mergeMemory(session, req.body?.memory);
@@ -350,7 +350,7 @@ app.post("/api/chat", async (req, res) => {
     const steps = [];
 
     if (approved && session.pending) {
-      steps.push({ type: "approval", text: `ØªÙØª Ø§ÙÙÙØ§ÙÙØ© Ø¹ÙÙ: ${session.pending.action}` });
+      steps.push({ type: "approval", text: `تمت الموافقة على: ${session.pending.action}` });
       session.pending = null;
     }
 
@@ -362,9 +362,9 @@ app.post("/api/chat", async (req, res) => {
             type: "input_text",
             text: [
               message,
-              approved ? "Ø§ÙÙØ³ØªØ®Ø¯Ù ÙØ§ÙÙ Ø¹ÙÙ Ø§ÙØ¥Ø¬Ø±Ø§Ø¡ Ø§ÙÙØ¹ÙÙ Ø¥Ù ÙØ¬Ø¯." : "",
+              approved ? "المستخدم وافق على الإجراء المعلق إن وجد." : "",
               Object.keys(session.memory).length
-                ? `Ø§ÙØ°Ø§ÙØ±Ø© Ø§ÙØ­Ø§ÙÙØ©: ${JSON.stringify(session.memory)}`
+                ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}`
                 : ""
             ].filter(Boolean).join("\n")
           }
@@ -387,7 +387,7 @@ app.post("/api/chat", async (req, res) => {
       for (const call of calls) {
         let args = {};
         try { args = JSON.parse(call.arguments || "{}"); } catch { args = {}; }
-        steps.push({ type: "tool", text: `ØªÙÙÙØ° Ø£Ø¯Ø§Ø©: ${call.name}` });
+        steps.push({ type: "tool", text: `تنفيذ أداة: ${call.name}` });
         const result = await runTool(call.name, args, session);
         outputs.push({
           type: "function_call_output",
@@ -411,7 +411,7 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     res.json({
-      text: response.output_text || "Ø§ÙØªÙÙØª Ø§ÙØ®Ø·ÙØ§ØªØ ÙÙÙ ÙÙ ÙØµÙ Ø±Ø¯ ÙØµÙ.",
+      text: response.output_text || "اكتملت الخطوات، لكن لم يصل رد نصي.",
       steps,
       memory: session.memory,
       files,
@@ -420,11 +420,11 @@ app.post("/api/chat", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    const detail = error?.message || "Ø­Ø¯Ø« Ø®Ø·Ø£ ÙÙ Ø§ÙØ®Ø§Ø¯Ù.";
+    const detail = error?.message || "حدث خطأ في الخادم.";
     res.status(500).json({
       error: detail.includes("429") || /quota|billing|insufficient/i.test(detail)
-        ? "Ø±ØµÙØ¯ OpenAI API ØµÙØ± Ø£Ù ØºÙØ± ÙØ§ÙÙ. Ø£Ø¶Ù Ø±ØµÙØ¯Ø§Ù Ø«Ù Ø£Ø¹Ø¯ Ø§ÙÙØ­Ø§ÙÙØ©."
-        : "Ø­Ø¯Ø« Ø®Ø·Ø£ ÙÙ Ø§ÙØ®Ø§Ø¯Ù. ØªØ­ÙÙ ÙÙ Ø§ÙÙÙØªØ§Ø­ ÙØ§ÙÙÙÙØ°Ø¬ ÙØ§ÙØ±ØµÙØ¯."
+        ? "رصيد OpenAI API صفر أو غير كافٍ. أضف رصيداً ثم أعد المحاولة."
+        : "حدث خطأ في الخادم. تحقق من المفتاح والنموذج والرصيد."
     });
   }
 });
