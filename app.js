@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.20.0: «خوارزميات الانتشار» للشرح، و«صورة: وصف...» لتوليد صورة تجريبية.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.21.0: الصور والفيديوهات تظهر في الشات. صورة: وصف… أو فيديو: رابط.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -244,17 +244,62 @@ function renderMarkdown(text) {
   let s = escapeHtml(text);
   s = s.replace(/```([\s\S]*?)```/g, (_, code) => "<pre><code>" + code + "</code></pre>");
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // صور آمنة من https فقط (بعد escape تتحول الأقواس كما هي للنص)
-  s = s.replace(/!\[([^\]]*)\]\(((?:https:\/\/|\/)[^)\s]+)\)/g, (_, alt, url) => {
+  s = s.replace(/!\[([^\]]*)\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g, (_, alt, url) => {
     const safeAlt = alt || "صورة";
-    // بعد escapeHtml قد تصبح & إلى &amp; وهذا صحيح داخل خاصية HTML
     return '<img class="gen-image" src="' + url + '" alt="' + safeAlt + '" loading="lazy" referrerpolicy="no-referrer" />';
+  });
+  s = s.replace(/\[\[video:youtube:([\w-]{6,})\]\]/g, (_, id) => {
+    return '<div class="gen-video-wrap"><iframe class="gen-video" src="https://www.youtube-nocookie.com/embed/' + id + '" title="YouTube" allowfullscreen loading="lazy" referrerpolicy="no-referrer" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>';
+  });
+  s = s.replace(/\[\[video:((?:https?:\/\/|\/)[^\]]+)\]\]/g, (_, url) => {
+    return '<div class="gen-video-wrap"><video class="gen-video" src="' + url + '" controls playsinline preload="metadata"></video></div>';
+  });
+  s = s.replace(/(^|<br>)(https?:\/\/[^\s<]+\.(?:mp4|webm|ogg)(?:\?[^\s<]*)?)(?=<br>|$)/gi, (_, pre, url) => {
+    return pre + '<div class="gen-video-wrap"><video class="gen-video" src="' + url + '" controls playsinline preload="metadata"></video></div>';
   });
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/^(?:- |\* )(.+)$/gm, "<li>$1</li>");
   s = s.replace(/(?:<li>.*<\/li>\n?)+/g, (block) => "<ul>" + block + "</ul>");
   s = s.replace(/\n/g, "<br>");
   return s;
+}
+
+function attachMedia(bodyEl, data) {
+  if (!bodyEl || !data) return;
+  if (data.imageUrl && !bodyEl.querySelector("img.gen-image")) {
+    const img = document.createElement("img");
+    img.className = "gen-image";
+    img.alt = "صورة مولّدة";
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.src = data.imageUrl;
+    bodyEl.appendChild(img);
+  }
+  if (data.youtubeId && !bodyEl.querySelector("iframe.gen-video")) {
+    const wrap = document.createElement("div");
+    wrap.className = "gen-video-wrap";
+    const iframe = document.createElement("iframe");
+    iframe.className = "gen-video";
+    iframe.src = "https://www.youtube-nocookie.com/embed/" + data.youtubeId;
+    iframe.title = "YouTube";
+    iframe.loading = "lazy";
+    iframe.allowFullscreen = true;
+    iframe.referrerPolicy = "no-referrer";
+    iframe.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture");
+    wrap.appendChild(iframe);
+    bodyEl.appendChild(wrap);
+  } else if (data.videoUrl && !bodyEl.querySelector("video.gen-video")) {
+    const wrap = document.createElement("div");
+    wrap.className = "gen-video-wrap";
+    const video = document.createElement("video");
+    video.className = "gen-video";
+    video.src = data.videoUrl;
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    wrap.appendChild(video);
+    bodyEl.appendChild(wrap);
+  }
 }
 
 function friendlyError(raw) {
@@ -389,6 +434,7 @@ async function maybeAutoSelfLearn() {
     }
     if (data.memory) saveMemory(data.memory);
     thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت دورة التعلّم.");
+      attachMedia(thinking.body, data);
     if (data.steps) {
       /* steps already may show via addMessage path — refresh simply */
     }
@@ -510,18 +556,7 @@ async function sendChat(text, { approved } = {}) {
       setStatus("error", "خطأ");
     } else {
       thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت الخطوات، لكن لم يصل رد نصي.");
-      if (data.imageUrl) {
-        const existing = thinking.body.querySelector("img.gen-image");
-        if (!existing) {
-          const img = document.createElement("img");
-          img.className = "gen-image";
-          img.alt = "صورة مولّدة";
-          img.loading = "lazy";
-          img.referrerPolicy = "no-referrer";
-          img.src = data.imageUrl;
-          thinking.body.appendChild(img);
-        }
-      }
+      attachMedia(thinking.body, data);
       // clear old step chips if any then add
       thinking.root.querySelectorAll(".steps,.files").forEach((el) => el.remove());
       if (data.steps && data.steps.length) {

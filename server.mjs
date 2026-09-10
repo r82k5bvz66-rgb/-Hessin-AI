@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.20.1";
+const VERSION = "2.21.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -64,7 +64,7 @@ app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src 'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   );
   const orig = res.json.bind(res);
   res.json = (body) => {
@@ -481,6 +481,32 @@ function extractImagePrompt(message) {
   return (m ? m[1] : t).trim().slice(0, 500);
 }
 
+function isVideoCommand(message) {
+  const t = String(message || "").trim();
+  return /^(?:فيديو|video|عرض فيديو)\s*[:：\-]?\s*.+/i.test(t);
+}
+
+function extractVideoTarget(message) {
+  const t = String(message || "").trim();
+  const m = t.match(/^(?:فيديو|video|عرض فيديو)\s*[:：\-]?\s*(.+)$/i);
+  return (m ? m[1] : t).trim().slice(0, 1000);
+}
+
+function youtubeId(url) {
+  const s = String(url || "");
+  let m = s.match(/[?&]v=([\w-]{6,})/);
+  if (m) return m[1];
+  m = s.match(/youtu\.be\/([\w-]{6,})/);
+  if (m) return m[1];
+  m = s.match(/youtube\.com\/shorts\/([\w-]{6,})/);
+  if (m) return m[1];
+  return "";
+}
+
+function isDirectVideoUrl(url) {
+  return /^https?:\/\/\S+\.(mp4|webm|ogg)(\?\S*)?$/i.test(String(url || "").trim());
+}
+
 function isSelfLearn(message) {
   const t = String(message || "").trim();
   return /^(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|تطور ذاتي|تعلّم ذاتي|تعلم ذاتي|self learn|evolve)$/i.test(t)
@@ -627,7 +653,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1301,7 +1327,8 @@ app.post("/api/chat", async (req, res) => {
     generalFreshReplies: true,
     genAlgoExplain: true,
     diffusionExplain: true,
-    imageGen: true
+    imageGen: true,
+    videoEmbed: true
       });
     }
 
@@ -1345,7 +1372,51 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    // توليد صورة تجريبي: صورة: وصف...
+    
+    // عرض فيديو في المحادثة: فيديو: رابط mp4 أو يوتيوب
+    if (isVideoCommand(message)) {
+      const target = extractVideoTarget(message);
+      if (!target) {
+        return res.status(400).json({ error: "الصق رابط فيديو بعد «فيديو:» (mp4 أو YouTube)." });
+      }
+      const yt = youtubeId(target);
+      let text = "";
+      let videoUrl = "";
+      let youtubeEmbed = "";
+      if (yt) {
+        youtubeEmbed = `https://www.youtube-nocookie.com/embed/${yt}`;
+        text = `عرض فيديو YouTube في المحادثة:\n\n[[video:youtube:${yt}]]\n\nالرابط: ${target}`;
+      } else if (isDirectVideoUrl(target) || /^https?:\/\/\S+$/i.test(target)) {
+        videoUrl = target;
+        text = `عرض فيديو في المحادثة:\n\n[[video:${videoUrl}]]\n\nإن لم يشتغل الرابط تأكد أنه ملف مباشر (mp4/webm) أو YouTube.`;
+      } else {
+        return res.json({
+          text: "لم أتعرف على رابط فيديو. أمثلة:\n- فيديو: https://example.com/clip.mp4\n- فيديو: https://www.youtube.com/watch?v=XXXXXXXXXXX",
+          steps: [{ type: "plan", text: "توضيح أمر الفيديو" }],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq"
+        });
+      }
+      session.memory.video_last = String(target).slice(0, 300);
+      session.memory.video_last_date = new Date().toISOString().slice(0, 10);
+      return res.json({
+        text,
+        steps: [{ type: "plan", text: "عرض فيديو" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "media",
+        videoUrl: videoUrl || undefined,
+        youtubeId: yt || undefined,
+        youtubeEmbed: youtubeEmbed || undefined
+      });
+    }
+
+// توليد صورة تجريبي: صورة: وصف...
     if (isImageGen(message)) {
       const prompt = extractImagePrompt(message);
       if (!prompt) {
@@ -1595,8 +1666,9 @@ app.get("/health", (_req, res) => {
     genAlgoExplain: true,
     diffusionExplain: true,
     imageGen: true,
+    videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.20.1-image-proxy"
+    release: "2.21.0-media-display"
   });
 });
 

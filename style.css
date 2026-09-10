@@ -408,3 +408,20 @@ button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid rgba(255,255,255,0.08);
   object-fit: cover;
 }
+
+
+.gen-video-wrap {
+  margin: 10px 0;
+  max-width: min(100%, 480px);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #000;
+}
+.gen-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  background: #000;
+}
