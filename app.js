@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.21.1: أمثلة عامة ومحايدة. صورة: وصف… أو فيديو: رابط.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.22.0: إنشاء صور بأسلوب Grok — اكتب «ارسم …» أو «صورة: …». الأفضل مع XAI_API_KEY.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -267,13 +267,33 @@ function renderMarkdown(text) {
 function attachMedia(bodyEl, data) {
   if (!bodyEl || !data) return;
   if (data.imageUrl && !bodyEl.querySelector("img.gen-image")) {
+    const card = document.createElement("div");
+    card.className = "media-card";
     const img = document.createElement("img");
     img.className = "gen-image";
     img.alt = "صورة مولّدة";
-    img.loading = "lazy";
+    img.loading = "eager";
     img.referrerPolicy = "no-referrer";
     img.src = data.imageUrl;
-    bodyEl.appendChild(img);
+    img.onerror = () => {
+      card.classList.add("media-error");
+      const err = document.createElement("div");
+      err.className = "media-fallback";
+      err.textContent = "تعذر عرض الصورة. أعد المحاولة أو أضف XAI_API_KEY لـ Grok Imagine.";
+      card.appendChild(err);
+    };
+    card.appendChild(img);
+    const actions = document.createElement("div");
+    actions.className = "media-actions";
+    const open = document.createElement("a");
+    open.className = "msg-action";
+    open.textContent = "فتح";
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.href = data.imageUrl.startsWith("data:") ? data.imageUrl : data.imageUrl;
+    actions.appendChild(open);
+    card.appendChild(actions);
+    bodyEl.appendChild(card);
   }
   if (data.youtubeId && !bodyEl.querySelector("iframe.gen-video")) {
     const wrap = document.createElement("div");
@@ -542,7 +562,11 @@ async function sendChat(text, { approved } = {}) {
   }
   activeAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
 
-  const thinking = addMessage({ text: "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.", who: "ai" });
+  const imageAsk = /^(?:صورة|ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد|ولّد|إنشاء صورة|انشئ صورة|generate image|draw|imagine)/i.test(String(message || "").trim());
+  const thinking = addMessage({
+    text: imageAsk ? "جارٍ إنشاء الصورة…" : "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.",
+    who: "ai"
+  });
 
   try {
     const { r, data } = await postChat({

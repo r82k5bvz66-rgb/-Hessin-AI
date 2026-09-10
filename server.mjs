@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.21.1";
+const VERSION = "2.22.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -457,28 +457,81 @@ function isDiffusionAlgo(message) {
 
 function isImageGen(message) {
   const t = String(message || "").trim();
-  return /^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة)\s*[:：\-]?\s*.+/i.test(t)
-    || /^(?:generate image|image)\s*[:：\-]?\s*.+/i.test(t);
+  if (!t) return false;
+  if (/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة|generate image|image)\s*[:：\-]?\s*.+/i.test(t)) return true;
+  if (/^(?:ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد لي صورة|أنشئ لي صورة|انشئ لي صورة)\b/i.test(t)) return true;
+  if (/\b(?:draw|generate an image|create an image|make an image|imagine)\b/i.test(t) && t.length < 400) return true;
+  return false;
 }
 
+function extractImagePrompt(message) {
+  let t = String(message || "").trim();
+  t = t.replace(/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة|generate image|image|ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد لي صورة|أنشئ لي صورة|انشئ لي صورة)\s*[:：\-]?\s*/i, "");
+  t = t.replace(/^(?:لي|من فضلك|رجاءً|please|please\s+draw)\s+/i, "");
+  t = t.replace(/^(?:an?\s+image\s+of|a\s+picture\s+of)\s+/i, "");
+  t = t.trim().slice(0, 500);
+  return t || "a clean modern product photo on a neutral background";
+}
 
 function buildImageUrl(prompt) {
-  const q = encodeURIComponent(String(prompt || "clean product photo").slice(0, 500));
-  // رابط نفس الموقع (proxy) حتى لا يمنع CSP عرض الصورة في المحادثة
+  const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
   return `/api/image?prompt=${q}&w=1024&h=1024`;
 }
 
 function buildUpstreamImageUrl(prompt, w = 1024, h = 1024) {
-  const q = encodeURIComponent(String(prompt || "clean product photo").slice(0, 500));
+  const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
   const width = Math.min(Math.max(Number(w) || 1024, 256), 1280);
   const height = Math.min(Math.max(Number(h) || 1024, 256), 1280);
   return `https://image.pollinations.ai/prompt/${q}?width=${width}&height=${height}&nologo=true`;
 }
 
-function extractImagePrompt(message) {
-  const t = String(message || "").trim();
-  const m = t.match(/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة|generate image|image)\s*[:：\-]?\s*(.+)$/i);
-  return (m ? m[1] : t).trim().slice(0, 500);
+function resolveGrokImageModel() {
+  const raw = String(process.env.GROK_IMAGE_MODEL || process.env.XAI_IMAGE_MODEL || "grok-imagine-image-quality").trim();
+  return raw.replace(/^["']|["']$/g, "") || "grok-imagine-image-quality";
+}
+
+async function generateImageLikeGrok(prompt) {
+  // Prefer xAI Imagine (Grok-style) when key exists; else same-origin proxy fallback
+  if (grokKey) {
+    try {
+      const baseURL = process.env.XAI_BASE_URL || process.env.GROK_BASE_URL || "https://api.x.ai/v1";
+      const model = resolveGrokImageModel();
+      const r = await fetch(`${baseURL.replace(/\/$/, "")}/images/generations`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${grokKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          prompt: String(prompt).slice(0, 500),
+          n: 1,
+          response_format: "b64_json"
+        })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const b64 = data?.data?.[0]?.b64_json || data?.data?.[0]?.b64;
+        const remoteUrl = data?.data?.[0]?.url;
+        if (b64) {
+          return { ok: true, imageUrl: `data:image/png;base64,${b64}`, provider: "grok-imagine", model };
+        }
+        if (remoteUrl) {
+          return { ok: true, imageUrl: remoteUrl, provider: "grok-imagine", model };
+        }
+      }
+      console.error("grok image failed", r.status, data?.error || data);
+    } catch (err) {
+      console.error("grok image error", err);
+    }
+  }
+  return {
+    ok: true,
+    imageUrl: buildImageUrl(prompt),
+    provider: "pollinations",
+    model: "pollinations-fallback"
+  };
 }
 
 function isVideoCommand(message) {
@@ -1328,6 +1381,8 @@ app.post("/api/chat", async (req, res) => {
     genAlgoExplain: true,
     diffusionExplain: true,
     imageGen: true,
+    grokImage: Boolean(grokKey),
+    grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true
       });
     }
@@ -1416,33 +1471,35 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-// توليد صورة تجريبي: صورة: وصف...
+// إنشاء صورة بأسلوب قريب من Grok: طلب طبيعي + Imagine إن وُجد المفتاح
     if (isImageGen(message)) {
       const prompt = extractImagePrompt(message);
       if (!prompt) {
-        return res.status(400).json({ error: "اكتب وصفاً بعد «صورة:» مثل: صورة: منتج على مكتب بإضاءة ناعمة." });
+        return res.status(400).json({ error: "صف ما تريد رسمه، مثل: ارسم منظر مدينة عند الغروب" });
       }
-      const url = buildImageUrl(prompt);
+      const generated = await generateImageLikeGrok(prompt);
+      const url = generated.imageUrl;
       session.memory.image_last_prompt = prompt.slice(0, 280);
-      session.memory.image_last_url = url.slice(0, 500);
+      session.memory.image_last_url = String(url).startsWith("data:") ? "data:image" : String(url).slice(0, 500);
       session.memory.image_last_date = new Date().toISOString().slice(0, 10);
-      session.log.push({ type: "image", prompt: prompt.slice(0, 120) });
-      if (appendLesson(session, `صورة: تعلّم صياغة وصف مرئي — ${prompt.slice(0, 120)}`, "image_gen")) {
-        /* ok */
-      }
-      const text = `توليد صورة (تجريبي عبر نموذج انتشار عام):\n\n**الوصف:** ${prompt}\n\n![صورة مولّدة](${url})\n\nنصيحة: كن محدداً (المنتج، المكان، الإضاءة، الأسلوب). راجع النتيجة قبل استخدامها إعلانياً.`;
+      session.memory.image_last_provider = generated.provider || "";
+      session.log.push({ type: "image", prompt: prompt.slice(0, 120), provider: generated.provider });
+      appendLesson(session, `صورة: ${prompt.slice(0, 120)}`, "image_gen");
+      const via = generated.provider === "grok-imagine" ? "Grok Imagine" : "توليد تجريبي";
+      const text = `تم إنشاء الصورة (${via}).\n\n**الوصف:** ${prompt}`;
       return res.json({
         text,
         steps: [
-          { type: "plan", text: "توليد صورة" },
-          { type: "memory", text: "حفظ آخر وصف صورة" }
+          { type: "plan", text: "إنشاء صورة" },
+          { type: "memory", text: generated.provider === "grok-imagine" ? "Grok Imagine" : "مزود احتياطي" }
         ],
         memory: session.memory,
         files: [],
         pending: session.pending,
         version: VERSION,
-        provider: "pollinations",
-        imageUrl: url
+        provider: generated.provider || "pollinations",
+        imageUrl: url,
+        imageModel: generated.model || null
       });
     }
 
@@ -1666,9 +1723,11 @@ app.get("/health", (_req, res) => {
     genAlgoExplain: true,
     diffusionExplain: true,
     imageGen: true,
+    grokImage: Boolean(grokKey),
+    grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.21.1-general-examples"
+    release: "2.22.0-grok-like-images"
   });
 });
 
