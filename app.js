@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.22.2: إصلاح «ارسم». الصور تظهر داخل الشات. حدّث الصفحة ثم جرب: ارسم قطة";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.24.0). النسخة الأساسية الحية: https://lunar-breeze-dawn-ember.grok.me";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -45,6 +45,24 @@ function setupInstallTip() {
     installDismiss.onclick = () => {
       localStorage.setItem(key, "1");
       installTip.classList.add("hidden");
+    };
+  }
+}
+
+function setupV3Banner() {
+  const banner = document.getElementById("v3Banner");
+  const dismissBtn = document.getElementById("v3BannerDismiss");
+  if (!banner) return;
+  const key = "hessin-v3-banner-dismissed";
+  if (localStorage.getItem(key) === "1") {
+    banner.classList.add("hidden");
+    return;
+  }
+  banner.classList.remove("hidden");
+  if (dismissBtn) {
+    dismissBtn.onclick = () => {
+      localStorage.setItem(key, "1");
+      banner.classList.add("hidden");
     };
   }
 }
@@ -719,6 +737,12 @@ clearBtn.addEventListener("click", () => {
   showMemoryRestored(loadMemory());
   input.focus();
 });
+
+setupNetBanner();
+setupInstallTip();
+setupV3Banner();
+setupJumpLatest();
+setupKeyboardAvoidance();
 
 const restoredMemory = loadMemory();
 if (restoredMemory && Object.keys(restoredMemory).length) {
