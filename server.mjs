@@ -26,7 +26,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.9.2";
+const VERSION = "2.9.3";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -208,6 +208,34 @@ function isPriceReport(message) {
 function isDailyDigest(message) {
   const t = String(message || "").trim();
   return /^(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(t);
+}
+
+function isSimpleChat(message) {
+  const t = String(message || "").trim();
+  if (!t || t.length > 80) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t)) return false;
+  if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
+  return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
+    || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
+}
+
+async function runSimpleReply(message, history) {
+  const historyMsgs = normalizeHistory(history).slice(-4);
+  const completion = await client.chat.completions.create({
+    model: resolveModel(),
+    messages: [
+      {
+        role: "system",
+        content: "أنت Hessin AI. رد بالعربية الفصحى الواضحة بجملة أو جملتين قصيرتين ودّيتين. لا تستخدم أدوات. لا تطوّل."
+      },
+      ...historyMsgs,
+      { role: "user", content: message }
+    ],
+    temperature: 0.5,
+    max_completion_tokens: 180
+  });
+  const text = String(completion.choices?.[0]?.message?.content || "").trim();
+  return text || "مرحباً. كيف أقدر أساعدك؟";
 }
 
 const searchTools = [{ type: "browser_search" }];
@@ -654,6 +682,21 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq"
+      });
+    }
+
+    const historyEarly = normalizeHistory(req.body?.history);
+    if (isSimpleChat(message)) {
+      const text = await runSimpleReply(message, historyEarly);
+      return res.json({
+        text,
+        steps: [{ type: "plan", text: "رد سريع" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq",
+        fastPath: true
       });
     }
 

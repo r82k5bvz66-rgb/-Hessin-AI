@@ -6,6 +6,8 @@ const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
 const memoryBanner = document.getElementById("memoryBanner");
+const stopBtn = document.getElementById("stop");
+let activeAbort = null;
 
 const STORAGE_KEY = "hessin-ai-v2";
 const MEMORY_KEY = "hessin-ai-memory";
@@ -243,8 +245,16 @@ async function sendChat(text, { approved } = {}) {
   resizeInput();
   send.disabled = true;
   send.textContent = "…";
+  if (stopBtn) {
+    stopBtn.classList.remove("hidden");
+    stopBtn.disabled = false;
+  }
   setStatus("busy", "يعمل");
   showPending(null);
+  if (activeAbort) {
+    try { activeAbort.abort(); } catch {}
+  }
+  activeAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
 
   const thinking = addMessage({ text: "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.", who: "ai" });
 
@@ -302,16 +312,32 @@ async function sendChat(text, { approved } = {}) {
       setStatus("ready", "جاهز");
     }
   } catch (err) {
-    thinking.root.classList.add("error");
-    thinking.body.textContent = friendlyError(err && err.message ? err.message : "تعذر الاتصال بالخادم.");
-    setStatus("error", "خطأ");
+    if (err && err.name === "AbortError") {
+      thinking.body.textContent = "تم إيقاف الطلب.";
+      setStatus("ready", "جاهز");
+    } else {
+      thinking.root.classList.add("error");
+      thinking.body.textContent = friendlyError(err && err.message ? err.message : "تعذر الاتصال بالخادم.");
+      setStatus("error", "خطأ");
+    }
   } finally {
     send.disabled = false;
     send.textContent = "تنفيذ";
+    if (stopBtn) {
+      stopBtn.classList.add("hidden");
+      stopBtn.disabled = true;
+    }
+    activeAbort = null;
     input.focus();
     persistChat();
     chat.scrollTop = chat.scrollHeight;
   }
+}
+
+if (stopBtn) {
+  stopBtn.addEventListener("click", () => {
+    if (activeAbort) activeAbort.abort();
+  });
 }
 
 form.addEventListener("submit", (e) => {

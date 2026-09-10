@@ -284,3 +284,19 @@ button#send:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 
 
+
+
+button.stop {
+  border: 1px solid #5a2a2a;
+  border-radius: 14px;
+  padding: 0 14px;
+  min-height: 46px;
+  min-width: 70px;
+  background: #2a1518;
+  color: #ffb4ae;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+button.stop.hidden { display: none; }
+button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
