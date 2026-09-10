@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.17.0";
+const VERSION = "2.18.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -378,6 +378,9 @@ function safeEvalMath(expr) {
 
 function needsWebSearch(message) {
   const t = String(message || "");
+  // أحدث/أعم: فعّل البحث للأسئلة العامة والمعاصرة وليس فقط التقارير المخصصة
+  if (/(?:اليوم|الآن|حاليا|حالياً|آخر|احدث|أحدث|جديد|update|latest|today|now|202[4-9]|خبر|أخبار|سعر|أسعار|سوق|شحن|جمارك|ترند)/i.test(t)) return true;
+  if (t.length >= 24 && /(?:ما هو|ما هي|كيف|لماذا|هل|اشرح|وضح|وضّح|قارن|أفضل|افضل|يعني إيه|يعني ايه)/i.test(t)) return true;
   return /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
 }
 
@@ -554,7 +557,8 @@ function isCodeIdeasView(message) {
 
 function isSimpleChat(message) {
   const t = String(message || "").trim();
-  if (!t || t.length > 80) return false;
+  if (!t || t.length > 60) return false;
+  if (needsWebSearch(t)) return false;
   if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
@@ -811,7 +815,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 لا تطلب مفتاح API من المستخدم. لا تكشف الأسرار.
 إذا نقصت بيانات، اذكر الافتراضات بوضوح.
 
-قوالب الردود:
+قواعد الرد العام والأحدث:\n- فضّل معلومة حديثة عبر البحث عندما يسأل عن اليوم/الأسعار/الأخبار/الشرح العام.\n- اجعل الرد أعمّ وأوضح لغير المتخصص، مع خطوة عملية واحدة.\n- إن لم تتأكد من رقم حديث قل ذلك باختصار.\n- لا تختصر الردود العامة إلى جملة واحدة بلا فائدة.\nقوالب الردود:
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
@@ -1173,7 +1177,8 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq",
-        sharedMemory: true
+        sharedMemory: true,
+    generalFreshReplies: true
       });
     }
 
@@ -1404,8 +1409,9 @@ app.get("/health", (_req, res) => {
     grokModel: grokKey ? GROK_MODEL : null,
     providers: ["groq", "grok", "pair"],
     sharedMemory: true,
+    generalFreshReplies: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.17.0-shared-memory"
+    release: "2.18.0-general-fresh"
   });
 });
 
