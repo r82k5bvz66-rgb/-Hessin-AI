@@ -27,7 +27,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.14.1";
+const VERSION = "2.14.2";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -79,9 +79,9 @@ function timingSafeEqualStr(a, b) {
 }
 
 function accessOk(req) {
-  const needed = process.env.HESSIN_ACCESS_PASSWORD;
+  const needed = String(process.env.HESSIN_ACCESS_PASSWORD || "").trim().replace(/^["']|["']$/g, "");
   if (!needed) return true;
-  const given = String(req.body?.password || req.headers["x-hessin-pass"] || "");
+  const given = String(req.body?.password || req.headers["x-hessin-pass"] || "").trim();
   return timingSafeEqualStr(given, needed);
 }
 
