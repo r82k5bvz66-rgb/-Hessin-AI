@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.22.1: الصور تُعرض داخل الشات مباشرة. اكتب: ارسم … ثم حدّث الصفحة إن لزم.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.22.2: إصلاح «ارسم». الصور تظهر داخل الشات. حدّث الصفحة ثم جرب: ارسم قطة";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -600,7 +600,7 @@ async function sendChat(text, { approved } = {}) {
   }
   activeAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
 
-  const imageAsk = /^(?:صورة|ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد|ولّد|إنشاء صورة|انشئ صورة|generate image|draw|imagine)/i.test(String(message || "").trim());
+  const imageAsk = /^(?:صورة|ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد|إنشاء صورة|انشئ صورة|generate image|draw|imagine)/i.test(String(message || "").trim());
   const thinking = addMessage({
     text: imageAsk ? "جارٍ إنشاء الصورة…" : "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.",
     who: "ai"

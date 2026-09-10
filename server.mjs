@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.22.1";
+const VERSION = "2.22.2";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -458,8 +458,10 @@ function isDiffusionAlgo(message) {
 function isImageGen(message) {
   const t = String(message || "").trim();
   if (!t) return false;
-  if (/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة|generate image|image)\s*[:：\-]?\s*.+/i.test(t)) return true;
-  if (/^(?:ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد لي صورة|أنشئ لي صورة|انشئ لي صورة)\b/i.test(t)) return true;
+  // لا تستخدم \\b مع العربية — لا تعمل كحد كلمة
+  if (/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة)\s*[:：\-]?\s*\S+/i.test(t)) return true;
+  if (/^(?:ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد لي صورة|أنشئ لي صورة|انشئ لي صورة)(?:\s+|[:：\-]).+/i.test(t)) return true;
+  if (/^(?:ارسم|أرسم)\s+.+/i.test(t)) return true;
   if (/\b(?:draw|generate an image|create an image|make an image|imagine)\b/i.test(t) && t.length < 400) return true;
   return false;
 }
@@ -1770,7 +1772,7 @@ app.get("/health", (_req, res) => {
     grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.22.1-inline-images"
+    release: "2.22.2-image-detect"
   });
 });
 
