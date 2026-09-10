@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.21.0";
+const VERSION = "2.21.1";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -444,7 +444,7 @@ function builtinDiffusionExplain() {
 5) جودة الناتج تعتمد على وضوح الـ prompt: موضوع + أسلوب + تفاصيل مفيدة، بدون حشو متناقض.
 6) للتاجر: ولّد صورة منتج/إعلان تجريبي، ثم راجعها قبل النشر (قد تخطئ في الكتابة داخل الصورة).
 
-لتجربة التوليد عندي اكتب: صورة: فرامل شاحنة على خلفية ورشة نظيفة إضاءة سينمائية
+لتجربة التوليد عندي اكتب: صورة: منتج بسيط على خلفية نظيفة بإضاءة واضحة
 
 ما تعلمناه اليوم: انتشار الصور يبدأ من ضوضاء ويُنظَّف تدريجياً بتجويه النص حتى تكتمل الصورة.`;
 }
@@ -463,13 +463,13 @@ function isImageGen(message) {
 
 
 function buildImageUrl(prompt) {
-  const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
+  const q = encodeURIComponent(String(prompt || "clean product photo").slice(0, 500));
   // رابط نفس الموقع (proxy) حتى لا يمنع CSP عرض الصورة في المحادثة
   return `/api/image?prompt=${q}&w=1024&h=1024`;
 }
 
 function buildUpstreamImageUrl(prompt, w = 1024, h = 1024) {
-  const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
+  const q = encodeURIComponent(String(prompt || "clean product photo").slice(0, 500));
   const width = Math.min(Math.max(Number(w) || 1024, 256), 1280);
   const height = Math.min(Math.max(Number(h) || 1024, 256), 1280);
   return `https://image.pollinations.ai/prompt/${q}?width=${width}&height=${height}&nologo=true`;
@@ -909,7 +909,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 لا تطلب مفتاح API من المستخدم. لا تكشف الأسرار.
 إذا نقصت بيانات، اذكر الافتراضات بوضوح.
 
-قواعد الرد العام والأحدث:\n- فضّل معلومة حديثة عبر البحث عندما يسأل عن اليوم/الأسعار/الأخبار/الشرح العام.\n- اجعل الرد أعمّ وأوضح لغير المتخصص، مع خطوة عملية واحدة.\n- إن لم تتأكد من رقم حديث قل ذلك باختصار.\n- لا تختصر الردود العامة إلى جملة واحدة بلا فائدة.\nقوالب الردود:
+تفضيل المستخدم: لا تركّز على الفرامل أو الورش في الأمثلة أو الصور إلا إذا طلب ذلك صراحة.\nقواعد الرد العام والأحدث:\n- فضّل معلومة حديثة عبر البحث عندما يسأل عن اليوم/الأسعار/الأخبار/الشرح العام.\n- اجعل الرد أعمّ وأوضح لغير المتخصص، مع خطوة عملية واحدة.\n- إن لم تتأكد من رقم حديث قل ذلك باختصار.\n- لا تختصر الردود العامة إلى جملة واحدة بلا فائدة.\nقوالب الردود:
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
@@ -1420,7 +1420,7 @@ app.post("/api/chat", async (req, res) => {
     if (isImageGen(message)) {
       const prompt = extractImagePrompt(message);
       if (!prompt) {
-        return res.status(400).json({ error: "اكتب وصفاً بعد «صورة:» مثل: صورة: فرامل شاحنة في ورشة." });
+        return res.status(400).json({ error: "اكتب وصفاً بعد «صورة:» مثل: صورة: منتج على مكتب بإضاءة ناعمة." });
       }
       const url = buildImageUrl(prompt);
       session.memory.image_last_prompt = prompt.slice(0, 280);
@@ -1668,7 +1668,7 @@ app.get("/health", (_req, res) => {
     imageGen: true,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.21.0-media-display"
+    release: "2.21.1-general-examples"
   });
 });
 
