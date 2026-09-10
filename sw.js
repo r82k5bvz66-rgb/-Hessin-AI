@@ -1,4 +1,4 @@
-const CACHE = "hessin-ai-v222";
+const CACHE = "hessin-ai-v221-inline";
 const ASSETS = ["/", "/index.html", "/style.css", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -7,7 +7,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).then(() => self.clients.claim())
   );
 });
 
@@ -15,14 +15,18 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  // لا تلمس API أو الصور/الفيديو — دائماً من الشبكة
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/app.js")) {
-    event.respondWith(fetch(req));
+  // الشبكة دائماً لـ JS/API/صور
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.endsWith("/app.js") ||
+    url.pathname.endsWith("/sw.js")
+  ) {
+    event.respondWith(fetch(req, { cache: "no-store" }));
     return;
   }
   event.respondWith(
     fetch(req).then((res) => {
-      if (res.ok && req.method === "GET") {
+      if (res.ok) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
       }

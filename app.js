@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.22.0: إنشاء صور بأسلوب Grok — اكتب «ارسم …» أو «صورة: …». الأفضل مع XAI_API_KEY.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.22.1: الصور تُعرض داخل الشات مباشرة. اكتب: ارسم … ثم حدّث الصفحة إن لزم.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -266,33 +266,73 @@ function renderMarkdown(text) {
 
 function attachMedia(bodyEl, data) {
   if (!bodyEl || !data) return;
-  if (data.imageUrl && !bodyEl.querySelector("img.gen-image")) {
-    const card = document.createElement("div");
-    card.className = "media-card";
-    const img = document.createElement("img");
-    img.className = "gen-image";
-    img.alt = "صورة مولّدة";
+  if (data.imageUrl) {
+    let card = bodyEl.querySelector(".media-card");
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "media-card";
+      bodyEl.appendChild(card);
+    }
+    let img = card.querySelector("img.gen-image");
+    if (!img) {
+      img = document.createElement("img");
+      img.className = "gen-image";
+      img.alt = "صورة مولّدة";
+      card.insertBefore(img, card.firstChild);
+    }
     img.loading = "eager";
+    img.decoding = "async";
     img.referrerPolicy = "no-referrer";
     img.src = data.imageUrl;
+    img.onload = () => { card.classList.remove("media-error"); };
     img.onerror = () => {
       card.classList.add("media-error");
-      const err = document.createElement("div");
-      err.className = "media-fallback";
-      err.textContent = "تعذر عرض الصورة. أعد المحاولة أو أضف XAI_API_KEY لـ Grok Imagine.";
-      card.appendChild(err);
+      if (!card.querySelector(".media-fallback")) {
+        const err = document.createElement("div");
+        err.className = "media-fallback";
+        err.textContent = "تعذر عرض الصورة. حدّث الصفحة ثم أعد المحاولة.";
+        card.appendChild(err);
+      }
     };
-    card.appendChild(img);
-    const actions = document.createElement("div");
-    actions.className = "media-actions";
-    const open = document.createElement("a");
-    open.className = "msg-action";
-    open.textContent = "فتح";
-    open.target = "_blank";
-    open.rel = "noopener noreferrer";
-    open.href = data.imageUrl.startsWith("data:") ? data.imageUrl : data.imageUrl;
-    actions.appendChild(open);
-    card.appendChild(actions);
+    if (!card.querySelector(".media-actions")) {
+      const actions = document.createElement("div");
+      actions.className = "media-actions";
+      const open = document.createElement("a");
+      open.className = "msg-action";
+      open.textContent = "فتح";
+      open.target = "_blank";
+      open.rel = "noopener noreferrer";
+      open.href = data.imageUrl;
+      actions.appendChild(open);
+      card.appendChild(actions);
+    }
+  }
+  if (data.mapEmbedUrl && !bodyEl.querySelector("iframe.map-frame")) {
+    const wrap = document.createElement("div");
+    wrap.className = "map-wrap";
+    const iframe = document.createElement("iframe");
+    iframe.className = "map-frame";
+    iframe.src = data.mapEmbedUrl;
+    iframe.title = data.mapName || "خريطة";
+    iframe.loading = "lazy";
+    iframe.referrerPolicy = "no-referrer";
+    wrap.appendChild(iframe);
+    bodyEl.appendChild(wrap);
+  }
+  if (data.siteUrl && !bodyEl.querySelector(".site-card")) {
+    const card = document.createElement("div");
+    card.className = "site-card";
+    const title = document.createElement("div");
+    title.className = "site-title";
+    title.textContent = "🌐 " + (data.siteTitle || data.siteUrl);
+    const link = document.createElement("a");
+    link.className = "site-link";
+    link.href = data.siteUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "فتح الموقع";
+    card.appendChild(title);
+    card.appendChild(link);
     bodyEl.appendChild(card);
   }
   if (data.youtubeId && !bodyEl.querySelector("iframe.gen-video")) {
@@ -305,7 +345,6 @@ function attachMedia(bodyEl, data) {
     iframe.loading = "lazy";
     iframe.allowFullscreen = true;
     iframe.referrerPolicy = "no-referrer";
-    iframe.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture");
     wrap.appendChild(iframe);
     bodyEl.appendChild(wrap);
   } else if (data.videoUrl && !bodyEl.querySelector("video.gen-video")) {
@@ -316,7 +355,6 @@ function attachMedia(bodyEl, data) {
     video.src = data.videoUrl;
     video.controls = true;
     video.playsInline = true;
-    video.preload = "metadata";
     wrap.appendChild(video);
     bodyEl.appendChild(wrap);
   }

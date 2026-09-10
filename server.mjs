@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.22.0";
+const VERSION = "2.22.1";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -475,7 +475,7 @@ function extractImagePrompt(message) {
 
 function buildImageUrl(prompt) {
   const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
-  return `/api/image?prompt=${q}&w=1024&h=1024`;
+  return `/api/image?prompt=${q}&w=768&h=768`;
 }
 
 function buildUpstreamImageUrl(prompt, w = 1024, h = 1024) {
@@ -490,8 +490,24 @@ function resolveGrokImageModel() {
   return raw.replace(/^["']|["']$/g, "") || "grok-imagine-image-quality";
 }
 
+async function fetchImageAsDataUrl(url) {
+  const r = await fetch(url, {
+    headers: { "User-Agent": "HessinAI/2.22.1", Accept: "image/*,*/*" },
+    redirect: "follow"
+  });
+  if (!r.ok) throw new Error("image_fetch_" + r.status);
+  const ctype = (r.headers.get("content-type") || "image/jpeg").split(";")[0].trim() || "image/jpeg";
+  if (!ctype.startsWith("image/")) throw new Error("not_image");
+  const buf = Buffer.from(await r.arrayBuffer());
+  // keep payload small for Vercel/chat JSON
+  if (buf.length > 1_800_000) throw new Error("image_too_large");
+  return `data:${ctype};base64,${buf.toString("base64")}`;
+}
+
 async function generateImageLikeGrok(prompt) {
-  // Prefer xAI Imagine (Grok-style) when key exists; else same-origin proxy fallback
+  const cleanPrompt = String(prompt || "").slice(0, 500);
+
+  // 1) Grok Imagine when key exists
   if (grokKey) {
     try {
       const baseURL = process.env.XAI_BASE_URL || process.env.GROK_BASE_URL || "https://api.x.ai/v1";
@@ -505,7 +521,7 @@ async function generateImageLikeGrok(prompt) {
         },
         body: JSON.stringify({
           model,
-          prompt: String(prompt).slice(0, 500),
+          prompt: cleanPrompt,
           n: 1,
           response_format: "b64_json"
         })
@@ -518,7 +534,12 @@ async function generateImageLikeGrok(prompt) {
           return { ok: true, imageUrl: `data:image/png;base64,${b64}`, provider: "grok-imagine", model };
         }
         if (remoteUrl) {
-          return { ok: true, imageUrl: remoteUrl, provider: "grok-imagine", model };
+          try {
+            const dataUrl = await fetchImageAsDataUrl(remoteUrl);
+            return { ok: true, imageUrl: dataUrl, provider: "grok-imagine", model };
+          } catch {
+            return { ok: true, imageUrl: remoteUrl, provider: "grok-imagine", model };
+          }
         }
       }
       console.error("grok image failed", r.status, data?.error || data);
@@ -526,12 +547,22 @@ async function generateImageLikeGrok(prompt) {
       console.error("grok image error", err);
     }
   }
-  return {
-    ok: true,
-    imageUrl: buildImageUrl(prompt),
-    provider: "pollinations",
-    model: "pollinations-fallback"
-  };
+
+  // 2) Pollinations -> embed as data URL so the chat ALWAYS can render inline
+  const upstream = buildUpstreamImageUrl(cleanPrompt, 768, 768);
+  try {
+    const dataUrl = await fetchImageAsDataUrl(upstream);
+    return { ok: true, imageUrl: dataUrl, provider: "pollinations", model: "pollinations-fallback" };
+  } catch (err) {
+    console.error("pollinations embed failed", err);
+    // last resort: same-origin proxy URL
+    return {
+      ok: true,
+      imageUrl: buildImageUrl(cleanPrompt).replace("w=1024&h=1024", "w=768&h=768"),
+      provider: "pollinations-proxy",
+      model: "pollinations-fallback"
+    };
+  }
 }
 
 function isVideoCommand(message) {
@@ -1288,7 +1319,7 @@ app.get("/api/image", async (req, res) => {
   try {
     const prompt = String(req.query?.prompt || "").trim().slice(0, 500);
     if (!prompt) return res.status(400).json({ error: "prompt required" });
-    const upstream = buildUpstreamImageUrl(prompt, req.query?.w, req.query?.h);
+    const upstream = buildUpstreamImageUrl(prompt, req.query?.w || 768, req.query?.h || 768);
     const r = await fetch(upstream, {
       headers: { "User-Agent": "HessinAI/2.20.1", Accept: "image/*,*/*" },
       redirect: "follow"
@@ -1478,6 +1509,17 @@ app.post("/api/chat", async (req, res) => {
         return res.status(400).json({ error: "صف ما تريد رسمه، مثل: ارسم منظر مدينة عند الغروب" });
       }
       const generated = await generateImageLikeGrok(prompt);
+      if (!generated?.imageUrl) {
+        return res.json({
+          text: "تعذر إنشاء الصورة الآن. أعد المحاولة بعد قليل.",
+          steps: [{ type: "plan", text: "فشل توليد الصورة" }],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq"
+        });
+      }
       const url = generated.imageUrl;
       session.memory.image_last_prompt = prompt.slice(0, 280);
       session.memory.image_last_url = String(url).startsWith("data:") ? "data:image" : String(url).slice(0, 500);
@@ -1485,13 +1527,14 @@ app.post("/api/chat", async (req, res) => {
       session.memory.image_last_provider = generated.provider || "";
       session.log.push({ type: "image", prompt: prompt.slice(0, 120), provider: generated.provider });
       appendLesson(session, `صورة: ${prompt.slice(0, 120)}`, "image_gen");
-      const via = generated.provider === "grok-imagine" ? "Grok Imagine" : "توليد تجريبي";
+      const via = generated.provider === "grok-imagine" ? "Grok Imagine" : "توليد داخل التطبيق";
+      // لا تعتمد على Markdown للصورة — الواجهة تُظهر imageUrl مباشرة
       const text = `تم إنشاء الصورة (${via}).\n\n**الوصف:** ${prompt}`;
       return res.json({
         text,
         steps: [
           { type: "plan", text: "إنشاء صورة" },
-          { type: "memory", text: generated.provider === "grok-imagine" ? "Grok Imagine" : "مزود احتياطي" }
+          { type: "memory", text: generated.provider || "image" }
         ],
         memory: session.memory,
         files: [],
@@ -1727,7 +1770,7 @@ app.get("/health", (_req, res) => {
     grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.22.0-grok-like-images"
+    release: "2.22.1-inline-images"
   });
 });
 
