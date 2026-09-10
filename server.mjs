@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.22.2";
+const VERSION = "2.23.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -384,33 +384,85 @@ function needsWebSearch(message) {
   return /(?:خوارزميات الانتشار|انتشار الصور|diffusion|خوارزميات التوليد|خوارزمية التوليد|تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
 }
 
+function normalizeCmd(message) {
+  let t = String(message || "");
+  t = t.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  t = t.replace(/\u0640/g, ""); // ـ
+  t = t.replace(/[أإآٱ]/g, "ا");
+  t = t.replace(/ة/g, "ه");
+  t = t.replace(/ى/g, "ي");
+  t = t.replace(/[\u064B-\u065F]/g, ""); // تشكيل
+  t = t.replace(/[؟?!…]+$/g, "");
+  t = t.replace(/[،,;؛.]+$/g, "");
+  t = t.replace(/\s+/g, " ").trim().toLowerCase();
+  // بادئات مجاملة شائعة قبل الأمر
+  t = t.replace(/^(?:من فضلك|لو سمحت|رجاء|رجاءا|من فضلك يا\s+\S+|يا\s+\S+|please|pls|hey)\s+/i, "").trim();
+  return t;
+}
+
+function cmdEquals(message, ...phrases) {
+  const t = normalizeCmd(message);
+  return phrases.some((p) => t === normalizeCmd(p));
+}
+
+function cmdStarts(message, ...prefixes) {
+  const t = normalizeCmd(message);
+  return prefixes.some((p) => {
+    const n = normalizeCmd(p);
+    return t === n || t.startsWith(n + " ") || t.startsWith(n + ":") || t.startsWith(n + "：") || t.startsWith(n + "-");
+  });
+}
+
+function cmdIncludes(message, ...needles) {
+  const t = normalizeCmd(message);
+  return needles.some((n) => t.includes(normalizeCmd(n)));
+}
+
+function isCommandsHelp(message) {
+  return cmdEquals(message, "اوامر", "الأوامر", "الاوامر", "مساعدة", "help", "commands", "قائمة الاوامر", "قائمه الاوامر");
+}
+
+function commandsHelpText() {
+  return `أوامر Hessin AI (اكتبها كما هي):
+
+• صورة / ارسم — توليد صورة (مثال: ارسم قطة على سطح القمر)
+• فيديو: رابط — عرض YouTube أو mp4
+• ملخص يومي / موجز اليوم
+• تجارة اليوم / تقرير أسعار
+• AI اليوم / أخبار X / تعلم من X
+• خوارزميات جوجل / خوارزميات التوليد / خوارزميات الانتشار
+• تعلم لوحدك / دروسي / تطوري / أفكار الكود
+• ذاكرة الفريق
+• استخدم grok / استخدم groq / اقتران
+• أوامر — هذه القائمة
+
+نصيحة: لا تستخدم حدود كلمة لاتينية مع العربي؛ الأوامر تُطبَّع تلقائياً (أ/إ/آ → ا، ة → ه، بدون تشكيل).`;
+}
+
 function isAiDigest(message) {
-  return /(?:AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء)/i.test(String(message || ""));
+  return cmdIncludes(message, "ai اليوم", "ذكاء اصطناعي اليوم", "تقنيات ai", "جديد الذكاء");
 }
 
 function isTradeDigest(message) {
-  return /(?:تجارة اليوم|التجارة العالمية|أسواق اليوم)/i.test(String(message || ""));
+  return cmdIncludes(message, "تجاره اليوم", "التجاره العالميه", "اسواق اليوم");
 }
 
 function isPriceReport(message) {
-  return /(?:تقرير أسعار|تقرير اسعار|أسعار اليوم|اسعار اليوم)/i.test(String(message || ""));
+  return cmdIncludes(message, "تقرير اسعار", "اسعار اليوم");
 }
 
 function isDailyDigest(message) {
-  const t = String(message || "").trim();
-  return /^(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(t);
+  return cmdEquals(message, "ملخص يومي", "موجز اليوم", "تقرير اليوم");
 }
 
 function isXNews(message) {
-  const t = String(message || "").trim();
-  return /(?:أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|تعلم من تويتر|X news|twitter news)/i.test(t)
-    || /^(?:X|تويتر)\s*(?:اليوم|أخبار|اخبار)?$/i.test(t);
+  return cmdIncludes(message, "اخبار x", "اخبار تويتر", "منصه x", "تعلم من x", "تعلم من تويتر", "x news", "twitter news")
+    || cmdEquals(message, "x", "تويتر", "x اليوم", "تويتر اليوم", "x اخبار", "تويتر اخبار");
 }
 
 function isGoogleAlgo(message) {
-  const t = String(message || "").trim();
-  return /(?:خوارزميات جوجل|خوارزمية جوجل|تحليل جوجل|تحديث جوجل|تحديثات جوجل|تحليل SEO|سيو جوجل|Google algorithm|core update|helpful content)/i.test(t)
-    || /^(?:جوجل|Google)\s*(?:SEO|سيو|خوارزم(?:ية|يات)?|تحديث(?:ات)?)?$/i.test(t);
+  return cmdIncludes(message, "خوارزميات جوجل", "خوارزميه جوجل", "تحليل جوجل", "تحديث جوجل", "تحديثات جوجل", "تحليل seo", "سيو جوجل", "google algorithm", "core update", "helpful content")
+    || cmdEquals(message, "جوجل", "google", "جوجل seo", "جوجل سيو", "جوجل خوارزميه", "جوجل تحديث");
 }
 
 
@@ -428,9 +480,10 @@ function builtinGenAlgoExplain() {
 }
 
 function isGenAlgo(message) {
-  const t = String(message || "").trim();
-  return /(?:خوارزميات الانتشار|انتشار الصور|diffusion|خوارزميات التوليد|خوارزمية التوليد|كيف يولّد|كيف يولد|توليد النصوص|next.?token|transformer|LLM|نموذج لغوي|آلية التوليد|generative algorithm)/i.test(t)
-    || /^(?:التوليد|شرح التوليد)$/i.test(t);
+  const t = normalizeCmd(message);
+  if (cmdIncludes(message, "خوارزميات الانتشار", "انتشار الصور", "diffusion")) return false; // لا تسرق أمر الانتشار
+  return cmdIncludes(message, "خوارزميات التوليد", "خوارزميه التوليد", "كيف يولد", "توليد النصوص", "next token", "transformer", "llm", "نموذج لغوي", "اليه التوليد", "generative algorithm")
+    || cmdEquals(message, "التوليد", "شرح التوليد");
 }
 
 
@@ -450,29 +503,29 @@ function builtinDiffusionExplain() {
 }
 
 function isDiffusionAlgo(message) {
-  const t = String(message || "").trim();
-  return /(?:خوارزميات الانتشار|خوارزمية الانتشار|انتشار الصور|diffusion|stable diffusion|كيف تُولَّد الصور|كيف تولد الصور)/i.test(t)
-    || /^(?:الانتشار|شرح الانتشار)$/i.test(t);
+  return cmdIncludes(message, "خوارزميات الانتشار", "خوارزميه الانتشار", "انتشار الصور", "diffusion", "stable diffusion", "كيف تولد الصور")
+    || cmdEquals(message, "الانتشار", "شرح الانتشار");
 }
 
 function isImageGen(message) {
-  const t = String(message || "").trim();
+  const t = normalizeCmd(message);
   if (!t) return false;
-  // لا تستخدم \\b مع العربية — لا تعمل كحد كلمة
-  if (/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة)\s*[:：\-]?\s*\S+/i.test(t)) return true;
-  if (/^(?:ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد لي صورة|أنشئ لي صورة|انشئ لي صورة)(?:\s+|[:：\-]).+/i.test(t)) return true;
-  if (/^(?:ارسم|أرسم)\s+.+/i.test(t)) return true;
-  if (/\b(?:draw|generate an image|create an image|make an image|imagine)\b/i.test(t) && t.length < 400) return true;
+  if (/^(?:ارسم|صوره|رسم|توليد صوره|انشاء صوره|انشئ صوره|ولد صوره)$/i.test(t)) return true;
+  if (/^(?:صوره|توليد صوره|انشاء صوره|انشئ صوره|ولد صوره|generate image|image|img)\s*[:：\-]?\s*\S+/i.test(t)) return true;
+  if (/^(?:ارسم|اعمل صوره|سوي صوره|ولد لي صوره|انشئ لي صوره|صور لي|ارسم لي)(?:\s+|[:：\-]).+/i.test(t)) return true;
+  if (/^(?:draw|generate an image|create an image|make an image|imagine)(?:\s+|[:：\-]).+/i.test(t) && t.length < 400) return true;
+  if (/^(?:draw|imagine)\s+\S+/i.test(t) && t.length < 400) return true;
   return false;
 }
 
 function extractImagePrompt(message) {
-  let t = String(message || "").trim();
-  t = t.replace(/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة|generate image|image|ارسم|أرسم|اعمل صورة|سوّي صورة|سوي صورة|ولد لي صورة|ولّد لي صورة|أنشئ لي صورة|انشئ لي صورة)\s*[:：\-]?\s*/i, "");
-  t = t.replace(/^(?:لي|من فضلك|رجاءً|please|please\s+draw)\s+/i, "");
+  let t = normalizeCmd(message);
+  t = t.replace(/^(?:ولد صوره|انشاء صوره|انشئ صوره|توليد صوره|صوره|generate image|image|img|ارسم|اعمل صوره|سوي صوره|ولد لي صوره|انشئ لي صوره|صور لي|ارسم لي|draw|imagine|create an image|make an image|generate an image)\s*[:：\-]?\s*/i, "");
+  t = t.replace(/^(?:لي|من فضلك|رجاء|please)\s+/i, "");
   t = t.replace(/^(?:an?\s+image\s+of|a\s+picture\s+of)\s+/i, "");
   t = t.trim().slice(0, 500);
-  return t || "a clean modern product photo on a neutral background";
+  if (!t || /^(?:ارسم|صوره|image|img|draw|imagine)$/i.test(t)) return "";
+  return t;
 }
 
 function buildImageUrl(prompt) {
@@ -494,7 +547,7 @@ function resolveGrokImageModel() {
 
 async function fetchImageAsDataUrl(url) {
   const r = await fetch(url, {
-    headers: { "User-Agent": "HessinAI/2.22.1", Accept: "image/*,*/*" },
+    headers: { "User-Agent": "HessinAI/2.23.0", Accept: "image/*,*/*" },
     redirect: "follow"
   });
   if (!r.ok) throw new Error("image_fetch_" + r.status);
@@ -568,14 +621,17 @@ async function generateImageLikeGrok(prompt) {
 }
 
 function isVideoCommand(message) {
-  const t = String(message || "").trim();
-  return /^(?:فيديو|video|عرض فيديو)\s*[:：\-]?\s*.+/i.test(t);
+  const t = normalizeCmd(message);
+  return /^(?:فيديو|video|عرض فيديو|فديو)\s*[:：\-]?\s*.+/i.test(t);
 }
 
 function extractVideoTarget(message) {
-  const t = String(message || "").trim();
-  const m = t.match(/^(?:فيديو|video|عرض فيديو)\s*[:：\-]?\s*(.+)$/i);
-  return (m ? m[1] : t).trim().slice(0, 1000);
+  const raw = String(message || "").trim();
+  const t = normalizeCmd(message);
+  const m = t.match(/^(?:فيديو|video|عرض فيديو|فديو)\s*[:：\-]?\s*(.+)$/i);
+  // احتفظ بالرابط الأصلي قدر الإمكان (normalize يخفض الأحرف)
+  const mRaw = raw.match(/^(?:فيديو|video|عرض فيديو|فديو)\s*[:：\-]?\s*(.+)$/i);
+  return (mRaw ? mRaw[1] : (m ? m[1] : t)).trim().slice(0, 1000);
 }
 
 function youtubeId(url) {
@@ -594,19 +650,16 @@ function isDirectVideoUrl(url) {
 }
 
 function isSelfLearn(message) {
-  const t = String(message || "").trim();
-  return /^(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|تطور ذاتي|تعلّم ذاتي|تعلم ذاتي|self learn|evolve)$/i.test(t)
-    || /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي)/i.test(t);
+  return cmdEquals(message, "تعلم لوحدك", "طور نفسك", "درس ذاتي", "تطور ذاتي", "تعلم ذاتي", "self learn", "evolve")
+    || cmdIncludes(message, "تعلم لوحدك", "طور نفسك", "درس ذاتي");
 }
 
 function isLessonsView(message) {
-  const t = String(message || "").trim();
-  return /^(?:دروسي|ما تعلمته|دروس التعلم|عرض الدروس|ماذا تعلمت)\s*[؟?]?$/i.test(t);
+  return cmdEquals(message, "دروسي", "ما تعلمته", "دروس التعلم", "عرض الدروس", "ماذا تعلمت");
 }
 
 function isSharedMemoryView(message) {
-  const t = String(message || "").trim();
-  return /^(?:ذاكرة الفريق|الذاكرة المشتركة|ذاكرتنا|زامن الذاكرة|عرض الذاكرة المشتركة)\s*[؟?]?$/i.test(t);
+  return cmdEquals(message, "ذاكره الفريق", "الذاكره المشتركه", "ذاكرتنا", "زامن الذاكره", "عرض الذاكره المشتركه");
 }
 
 function appendLesson(session, lesson, source) {
@@ -726,20 +779,18 @@ function applySelfEvolutionFromLessons(session, searchContext) {
 }
 
 function isEvolutionView(message) {
-  const t = String(message || "").trim();
-  return /^(?:تطوري|تطوّري|قواعد التطور|عرض التطور|ماذا تطورت)\s*[؟?]?$/i.test(t);
+  return cmdEquals(message, "تطوري", "قواعد التطور", "عرض التطور", "evolution");
 }
 
 function isCodeIdeasView(message) {
-  const t = String(message || "").trim();
-  return /^(?:أفكار الكود|اقتراحات الكود|تحسينات معلقة)\s*[؟?]?$/i.test(t);
+  return cmdEquals(message, "افكار الكود", "اقتراحات الكود", "افكار تحسين", "code ideas");
 }
 
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1461,6 +1512,19 @@ app.post("/api/chat", async (req, res) => {
     }
 
     
+    if (isCommandsHelp(message)) {
+      return res.json({
+        text: commandsHelpText(),
+        steps: [{ type: "plan", text: "قائمة الأوامر" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq",
+        command: "help"
+      });
+    }
+
     // عرض فيديو في المحادثة: فيديو: رابط mp4 أو يوتيوب
     if (isVideoCommand(message)) {
       const target = extractVideoTarget(message);
@@ -1508,7 +1572,16 @@ app.post("/api/chat", async (req, res) => {
     if (isImageGen(message)) {
       const prompt = extractImagePrompt(message);
       if (!prompt) {
-        return res.status(400).json({ error: "صف ما تريد رسمه، مثل: ارسم منظر مدينة عند الغروب" });
+        return res.json({
+          text: "تمام — اكتب وصف الصورة بعد الأمر.\nمثال: ارسم قطة على سطح القمر\nأو: صورة: منتج بسيط على خلفية بيضاء",
+          steps: [{ type: "plan", text: "توضيح أمر الصورة" }],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq",
+          command: "image_help"
+        });
       }
       const generated = await generateImageLikeGrok(prompt);
       if (!generated?.imageUrl) {
