@@ -86,8 +86,19 @@ function setAccessPassword(value) {
   else localStorage.removeItem("hessin-access-pass");
 }
 
+function normalizeCmdLocal(raw) {
+  let t = String(raw || "");
+  t = t.replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\u0640/g, "");
+  t = t.replace(/[أإآٱ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+  t = t.replace(/[\u064B-\u065F]/g, "");
+  t = t.replace(/[؟?!…]+$/g, "").replace(/[،,;؛.]+$/g, "");
+  t = t.replace(/\s+/g, " ").trim().toLowerCase();
+  t = t.replace(/^(?:من فضلك|لو سمحت|رجاء|رجاءا|please|pls|hey)\s+/i, "").trim();
+  return t;
+}
+
 function applyProviderCommand(raw) {
-  const t = String(raw || "").trim();
+  const t = normalizeCmdLocal(raw);
   if (/^(?:استخدم grok|مزود grok|provider grok|مع grok)$/i.test(t)) {
     selectedProvider = "grok";
     localStorage.setItem("hessin-provider", "grok");
