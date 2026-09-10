@@ -11,10 +11,22 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 const groqKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
-const client = new OpenAI({
+const grokKey = String(process.env.XAI_API_KEY || process.env.GROK_API_KEY || "").trim();
+
+const groqClient = new OpenAI({
   apiKey: groqKey,
   baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1"
 });
+
+const grokClient = grokKey
+  ? new OpenAI({
+      apiKey: grokKey,
+      baseURL: process.env.XAI_BASE_URL || process.env.GROK_BASE_URL || "https://api.x.ai/v1"
+    })
+  : null;
+
+// Default client stays Groq (browser_search + agent tools)
+const client = groqClient;
 
 function resolveModel() {
   const raw = String(process.env.MODEL || process.env.GROQ_MODEL || "openai/gpt-oss-20b").trim();
@@ -26,8 +38,22 @@ function resolveModel() {
   return cleaned;
 }
 
+function resolveGrokModel() {
+  const raw = String(process.env.GROK_MODEL || process.env.XAI_MODEL || "grok-2-latest").trim();
+  return raw.replace(/^["']|["']$/g, "").trim() || "grok-2-latest";
+}
+
 const MODEL = resolveModel();
-const VERSION = "2.15.0";
+const GROK_MODEL = resolveGrokModel();
+
+function normalizeProvider(raw) {
+  const p = String(raw || "").trim().toLowerCase();
+  if (p === "grok" || p === "xai" || p === "x-ai") return "grok";
+  if (p === "pair" || p === "both" || p === "grok+groq") return "pair";
+  if (p === "groq" || p === "hessin" || p === "") return "groq";
+  return "groq";
+}
+const VERSION = "2.16.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -485,6 +511,71 @@ function isSimpleChat(message) {
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
 }
 
+
+async function runGrokDirect({ message, history, memory, searchContext }) {
+  if (!grokClient) {
+    const err = new Error("مفتاح Grok غير موجود. أضف XAI_API_KEY في إعدادات Vercel.");
+    err.code = "NO_GROK_KEY";
+    throw err;
+  }
+  const historyMsgs = normalizeHistory(history).slice(-8);
+  const mem = memory && Object.keys(memory).length
+    ? `الذاكرة: ${JSON.stringify(memory).slice(0, 1500)}`
+    : "";
+  const lessons = typeof formatLessons === "function" ? formatLessons(memory || {}) : "";
+  const evo = typeof evolutionPromptBlock === "function" ? evolutionPromptBlock(memory || {}) : "";
+  const system = `أنت Grok مقترن مع Hessin AI. رد بالعربية الفصحى الواضحة.
+أنت جزء من فريق واحد مع Hessin AI والمدربة: ساعد المستخدم عملياً في التجارة والمشروع.
+لا تكشف أسراراً ولا تطلب مفاتيح ولا تدّعِ دفع كود إلى GitHub.`;
+  const userParts = [
+    message,
+    searchContext ? `سياق بحث:\\n${String(searchContext).slice(0, 3000)}` : "",
+    mem,
+    lessons ? `دروس:\\n${lessons}` : "",
+    evo ? `قواعد تطوّر:\\n${evo}` : ""
+  ].filter(Boolean);
+  const completion = await grokClient.chat.completions.create({
+    model: GROK_MODEL,
+    messages: [
+      { role: "system", content: system },
+      ...historyMsgs,
+      { role: "user", content: userParts.join("\\n\\n") }
+    ],
+    temperature: 0.5,
+    max_completion_tokens: 1200
+  });
+  return String(completion.choices?.[0]?.message?.content || "").trim() || "تعذر الحصول على رد من Grok.";
+}
+
+async function runGrokCoachNote({ message, history, memory, searchContext }) {
+  if (!grokClient) return "";
+  try {
+    const completion = await grokClient.chat.completions.create({
+      model: GROK_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "أنت Grok مساهم مع Hessin AI. اكتب بالعربية الفصحى 4–8 أسطر مساعدة فقط (زاوية/تحذير/خطوة). لا أسرار ولا مفاتيح."
+        },
+        ...normalizeHistory(history).slice(-4),
+        {
+          role: "user",
+          content: [
+            `رسالة: ${message}`,
+            searchContext ? `بحث:\\n${String(searchContext).slice(0, 2000)}` : "",
+            memory ? `ذاكرة:\\n${JSON.stringify(memory).slice(0, 800)}` : ""
+          ].filter(Boolean).join("\\n\\n")
+        }
+      ],
+      temperature: 0.4,
+      max_completion_tokens: 450
+    });
+    return String(completion.choices?.[0]?.message?.content || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 async function runSimpleReply(message, history) {
   const historyMsgs = normalizeHistory(history).slice(-4);
   const completion = await client.chat.completions.create({
@@ -492,7 +583,7 @@ async function runSimpleReply(message, history) {
     messages: [
       {
         role: "system",
-        content: "أنت Hessin AI. مهم: تطوّرك الذاتي سلوك وذاكرة وقواعد فقط — لا تدّعِ أنك دفعت كوداً إلى GitHub وحدك، ولا تطلب مفاتيح Git.. رد بالعربية الفصحى الواضحة بجملة أو جملتين قصيرتين ودّيتين. لا تستخدم أدوات. لا تطوّل."
+        content: "أنت Hessin AI. يمكن استدعاؤك مع provider=groq أو provider=grok أو provider=pair.. مهم: تطوّرك الذاتي سلوك وذاكرة وقواعد فقط — لا تدّعِ أنك دفعت كوداً إلى GitHub وحدك، ولا تطلب مفاتيح Git.. رد بالعربية الفصحى الواضحة بجملة أو جملتين قصيرتين ودّيتين. لا تستخدم أدوات. لا تطوّل."
       },
       ...historyMsgs,
       { role: "user", content: message }
@@ -973,7 +1064,13 @@ app.post("/api/chat", async (req, res) => {
     if (!accessOk(req)) {
       return res.status(401).json({ error: "كلمة السر غير صحيحة.", needPassword: true });
     }
-    if (!groqKey) {
+    const provider = normalizeProvider(req.body?.provider);
+    if (provider === "grok" || provider === "pair") {
+      if (!grokKey) {
+        return res.status(500).json({ error: "مفتاح Grok غير موجود. أضف XAI_API_KEY في إعدادات Vercel." });
+      }
+    }
+    if (provider !== "grok" && !groqKey) {
       return res.status(500).json({ error: "مفتاح Groq غير موجود. أضف GROQ_API_KEY في إعدادات Vercel." });
     }
 
@@ -1036,6 +1133,27 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq"
+      });
+    }
+
+    // مزوّد Grok مباشر: { message, provider: "grok", password? }
+    if (provider === "grok") {
+      const history = normalizeHistory(req.body?.history);
+      const text = await runGrokDirect({
+        message,
+        history,
+        memory: session.memory,
+        searchContext: ""
+      });
+      return res.json({
+        text,
+        steps: [{ type: "plan", text: "رد عبر Grok" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "grok",
+        model: GROK_MODEL
       });
     }
 
@@ -1126,6 +1244,20 @@ app.post("/api/chat", async (req, res) => {
     }
 
     const history = normalizeHistory(req.body?.history);
+    if (provider === "pair" && grokClient) {
+      steps.push({ type: "plan", text: "اقتران Hessin + Grok" });
+      const note = await runGrokCoachNote({
+        message,
+        history,
+        memory: session.memory,
+        searchContext
+      });
+      if (note) {
+        searchContext = `${searchContext ? searchContext + "\n\n" : ""}[مساهمة Grok]\n${note}`;
+        session.memory.grok_last_pair = note.replace(/\s+/g, " ").trim().slice(0, 280);
+        steps.push({ type: "plan", text: "مساهمة Grok مدمجة" });
+      }
+    }
     const agent = await runAgentLoop({ message, session, approved, searchContext, history });
     const allSteps = steps.concat(agent.steps || []);
 
@@ -1141,7 +1273,8 @@ app.post("/api/chat", async (req, res) => {
       files,
       pending: session.pending,
       version: VERSION,
-      provider: "groq"
+      provider: provider === "pair" ? "pair" : "groq",
+      paired: provider === "pair"
     });
   } catch (error) {
     console.error(error);
@@ -1186,7 +1319,10 @@ app.get("/health", (_req, res) => {
     selfEvolve: true,
     autoCodePush: false,
     accessPasswordUi: true,
-    release: "2.15.0-update"
+    grokConfigured: Boolean(grokKey),
+    grokModel: grokKey ? GROK_MODEL : null,
+    providers: ["groq", "grok", "pair"],
+    release: "2.16.0-grok-provider"
   });
 });
 

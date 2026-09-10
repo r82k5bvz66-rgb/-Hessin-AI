@@ -17,9 +17,9 @@ const STORAGE_KEY = "hessin-ai-v2";
 const MEMORY_KEY = "hessin-ai-memory";
 
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.15.0: اتصال أوضح + كلمة المرور تُطلب فقط إن فُعّلت. اكتب «تعلم لوحدك» أو «دروسي» أو «تطوري».";
+let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.16.0: اكتب «استخدم grok» أو «استخدم groq» أو «اقتران». للـ API أرسل provider مع الرسالة.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -86,6 +86,26 @@ function setAccessPassword(value) {
   else localStorage.removeItem("hessin-access-pass");
 }
 
+function applyProviderCommand(raw) {
+  const t = String(raw || "").trim();
+  if (/^(?:استخدم grok|مزود grok|provider grok|مع grok)$/i.test(t)) {
+    selectedProvider = "grok";
+    localStorage.setItem("hessin-provider", "grok");
+    return "تم: الردود عبر Grok (يلزم XAI_API_KEY في Vercel).";
+  }
+  if (/^(?:استخدم groq|مزود groq|provider groq|بدون grok)$/i.test(t)) {
+    selectedProvider = "groq";
+    localStorage.setItem("hessin-provider", "groq");
+    return "تم: الردود عبر Groq/Hessin.";
+  }
+  if (/^(?:اقتران|pair|مع بعض|hessin\+grok)$/i.test(t)) {
+    selectedProvider = "pair";
+    localStorage.setItem("hessin-provider", "pair");
+    return "تم: وضع الاقتران Hessin + Grok.";
+  }
+  return null;
+}
+
 async function ensureAccessPassword(force) {
   if (!serverMeta.passwordRequired && !force) return getAccessPassword();
   if (!force && getAccessPassword()) return getAccessPassword();
@@ -111,7 +131,8 @@ function buildChatBody(extra) {
     sessionId: sessionId(),
     memory: loadMemory(),
     history: [],
-    password: getAccessPassword()
+    password: getAccessPassword(),
+    provider: selectedProvider || "groq"
   }, extra || {});
 }
 
@@ -445,6 +466,12 @@ function recentHistory(limit = 8) {
 
 async function sendChat(text, { approved } = {}) {
   const message = String(text || "").trim();
+  const switched = applyProviderCommand(message);
+  if (switched) {
+    addMessage({ text: switched, who: "ai" });
+    persistChat();
+    return;
+  }
   if (!message) return;
 
   addMessage({ text: message, who: "user" });
