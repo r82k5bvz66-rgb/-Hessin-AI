@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.21.1: أمثلة عامة (بدون تركيز فرامل/ورش). صورة: وصف… أو فيديو: رابط.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.21.1: أمثلة عامة ومحايدة. صورة: وصف… أو فيديو: رابط.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
