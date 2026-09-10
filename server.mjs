@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.23.0";
+const VERSION = "2.24.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -547,7 +547,7 @@ function resolveGrokImageModel() {
 
 async function fetchImageAsDataUrl(url) {
   const r = await fetch(url, {
-    headers: { "User-Agent": "HessinAI/2.23.0", Accept: "image/*,*/*" },
+    headers: { "User-Agent": "HessinAI/2.24.0", Accept: "image/*,*/*" },
     redirect: "follow"
   });
   if (!r.ok) throw new Error("image_fetch_" + r.status);
@@ -1845,7 +1845,9 @@ app.get("/health", (_req, res) => {
     grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.22.2-image-detect"
+    release: "2.24.0-live-primary-notice",
+    livePrimary: "https://lunar-breeze-dawn-ember.grok.me",
+    legacy: true
   });
 });
 
