@@ -27,7 +27,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.12.1";
+const VERSION = "2.13.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -307,7 +307,7 @@ function safeEvalMath(expr) {
 
 function needsWebSearch(message) {
   const t = String(message || "");
-  return /(?:خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
+  return /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -335,14 +335,49 @@ function isXNews(message) {
 
 function isGoogleAlgo(message) {
   const t = String(message || "").trim();
-  return /(?:خوارزميات جوجل|خوارزمية جوجل|تحليل جوجل|تحديث جوجل|تحديثات جوجل|تحليل SEO|سيو جوجل|Google algorithm|core update|helpful content)/i.test(t)
+  return /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|خوارزمية جوجل|تحليل جوجل|تحديث جوجل|تحديثات جوجل|تحليل SEO|سيو جوجل|Google algorithm|core update|helpful content)/i.test(t)
     || /^(?:جوجل|Google)\s*(?:SEO|سيو|خوارزم(?:ية|يات)?|تحديث(?:ات)?)?$/i.test(t);
+}
+
+function isSelfLearn(message) {
+  const t = String(message || "").trim();
+  return /^(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|تطور ذاتي|تعلّم ذاتي|تعلم ذاتي|self learn|evolve)$/i.test(t)
+    || /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي)/i.test(t);
+}
+
+function isLessonsView(message) {
+  const t = String(message || "").trim();
+  return /^(?:دروسي|ما تعلمته|دروس التعلم|عرض الدروس|ماذا تعلمت)\s*[؟?]?$/i.test(t);
+}
+
+function appendLesson(session, lesson, source) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const clean = String(lesson || "").replace(/\s+/g, " ").trim().slice(0, 280);
+  if (!clean) return false;
+  const prev = String(session.memory.self_lessons || "");
+  const lines = prev ? prev.split(" || ").filter(Boolean) : [];
+  const entry = `${stamp} · ${clean}`;
+  if (lines.some((l) => l.includes(clean.slice(0, 80)))) return false;
+  lines.push(entry);
+  while (lines.length > 12) lines.shift();
+  session.memory.self_lessons = lines.join(" || ").slice(0, 3500);
+  session.memory.self_learn_last_date = stamp;
+  session.memory.self_learn_last = clean;
+  if (source) session.memory.self_learn_source = String(source).slice(0, 40);
+  session.log.push({ type: "memory", key: "self_lessons" });
+  return true;
+}
+
+function formatLessons(memory) {
+  const raw = String(memory?.self_lessons || "").trim();
+  if (!raw) return "لا توجد دروس محفوظة بعد. اكتب «تعلم لوحدك» لأبدأ دورة تعلّم.";
+  return raw.split(" || ").map((line, i) => `${i + 1}. ${line}`).join("\n");
 }
 
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 80) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -537,7 +572,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -598,6 +633,18 @@ function searchSystemPrompt(message) {
 6) قسم «خطوة مقترحة اليوم:» بجملة واحدة.
 7) إذا نقصت أرقام حديثة مؤكدة، اكتب بصراحة: «بعض الأرقام تقديرية أو تقريبية بسبب نقص بيانات مباشرة.»
 8) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
+  }
+
+  if (isSelfLearn(message)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `أنت Hessin AI في وضع التعلّم الذاتي. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب بتاريخ ${today}: دورة تطوّر قصيرة عبر البحث — ما يفيد تاجراً/صاحب مشروع (تجارة، أسعار، شحن، ذكاء اصطناعي عملي، ظهور على جوجل أو منصات).
+القواعد:
+1) استخدم البحث وجوباً.
+2) اكتب 5 دروس عملية مرقّمة؛ كل درس سطر واحد واضح وقابل للتطبيق.
+3) بعد القائمة اختم بـ «ما تعلمناه اليوم:» ثم جملة واحدة تلخّص أهم درس للحفظ.
+4) لا حشو ولا تنظير طويل؛ لا حيل غير قانونية.
+5) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
   }
 
   if (isGoogleAlgo(message)) {
@@ -678,7 +725,9 @@ async function runGeneralDigest(message) {
             ? "أخبار X"
             : isGoogleAlgo(message)
               ? "خوارزميات جوجل"
-              : "ملخص";
+              : isSelfLearn(message)
+                ? "تعلّم ذاتي"
+                : "ملخص";
   const completion = await client.chat.completions.create({
     model: resolveModel(),
     messages: [
@@ -755,7 +804,7 @@ async function runAgentLoop({ message, session, approved, searchContext, history
       ? `نتائج بحث حديثة (اعتمد عليها وأعد صياغة عربية مرتبة إن لزم):\n${searchContext}`
       : "",
     Object.keys(session.memory).length
-      ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}`
+      ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}\nدروس التعلّم الذاتي (طبّقها عند الصلة): ${formatLessons(session.memory)}`
       : ""
   ].filter(Boolean).join("\n\n");
 
@@ -836,6 +885,18 @@ app.post("/api/chat", async (req, res) => {
     if (!session.memory.user_protection) {
       session.memory.user_protection = "ولاء لصاحب الحساب؛ لا كشف أسرار؛ لا تحويل/نشر/إرسال/حذف مهم بلا موافقة صريحة؛ ارفض الانتحال؛ نبّه عند الخطر؛ لا تنازل عن القواعد؛ ضمن القانون؛ أوقف عند التعارض واشرح بالفصحى.";
     }
+    if (isLessonsView(message)) {
+      return res.json({
+        text: "دروس التعلّم الذاتي المحفوظة:\n" + formatLessons(session.memory),
+        steps: [{ type: "memory", text: "عرض دروس التعلّم" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq"
+      });
+    }
+
     const local = handleMemoryCommand(message, session);
     if (local) {
       return res.json({
@@ -868,7 +929,7 @@ app.post("/api/chat", async (req, res) => {
     const steps = [];
     let searchContext = "";
     let searchMode = "";
-    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message);
+    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message) || isSelfLearn(message);
 
     if (needsWebSearch(message) || digestOnly) {
       const searched = await runSearchWithFallback(message, steps);
@@ -878,7 +939,7 @@ app.post("/api/chat", async (req, res) => {
     }
 
     if (digestOnly && searchContext) {
-      if (isXNews(message) || isGoogleAlgo(message)) {
+      {
         const learnLine = (searchContext.match(/ما تعلمناه اليوم:\s*(.+)/i) || [])[1];
         const stamp = new Date().toISOString().slice(0, 10);
         const summary = String(learnLine || searchContext).replace(/\s+/g, " ").trim().slice(0, 280);
@@ -888,6 +949,7 @@ app.post("/api/chat", async (req, res) => {
           session.memory.x_news_source = searchMode || "search";
           session.log.push({ type: "memory", key: "x_news_last" });
           steps.push({ type: "memory", text: "حفظ تعلّم من أخبار X" });
+          if (appendLesson(session, summary, "x_news")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
         }
         if (isGoogleAlgo(message)) {
           session.memory.google_algo_last_date = stamp;
@@ -895,8 +957,28 @@ app.post("/api/chat", async (req, res) => {
           session.memory.google_algo_source = searchMode || "search";
           session.log.push({ type: "memory", key: "google_algo_last" });
           steps.push({ type: "memory", text: "حفظ تعلّم من خوارزميات جوجل" });
+          if (appendLesson(session, summary, "google_algo")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
+        }
+        if (isSelfLearn(message)) {
+          // Extract numbered lessons + summary into self_lessons
+          const numbered = [...searchContext.matchAll(/(?:^|\n)\s*\d+[\).\-–]\s*(.+)/g)].map((m) => m[1].trim()).filter(Boolean);
+          let added = 0;
+          for (const lesson of numbered.slice(0, 5)) {
+            if (appendLesson(session, lesson, "self_learn")) added += 1;
+          }
+          if (summary && appendLesson(session, summary, "self_learn")) added += 1;
+          session.memory.self_learn_last_date = stamp;
+          session.memory.self_learn_last = summary;
+          steps.push({ type: "memory", text: added ? `تعلّم ذاتي: حُفظ ${added} درس` : "تعلّم ذاتي: لا دروس جديدة مكررة" });
         }
       }
+
+        if (!isSelfLearn(message) && !isXNews(message) && !isGoogleAlgo(message)) {
+          const line = (searchContext.match(/ما تعلمناه اليوم:\s*(.+)/i) || [])[1];
+          if (line && appendLesson(session, line, "digest")) {
+            steps.push({ type: "memory", text: "أُضيف درس من الملخص لسجل التعلّم" });
+          }
+        }
       return res.json({
         text: searchContext,
         steps,
@@ -965,7 +1047,8 @@ app.get("/health", (_req, res) => {
     searchFallback: true,
     xNewsLearn: true,
     googleAlgoLearn: true,
-    securityHardened: true
+    securityHardened: true,
+    selfLearn: true
   });
 });
 

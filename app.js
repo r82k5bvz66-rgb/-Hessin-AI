@@ -17,7 +17,7 @@ const STORAGE_KEY = "hessin-ai-v2";
 const MEMORY_KEY = "hessin-ai-memory";
 
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب مهمتك مباشرة. مثال: خوارزميات جوجل — لتحليل تحديثات البحث ويحفظ ما تعلّمه.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب «تعلم لوحدك» ليتطور ذاتياً ويحفظ الدروس، أو «دروسي» لعرضها. يعمل أيضاً تعلّم خفيف مرة يومياً عند الفتح.";
 
 
 function setupNetBanner() {
@@ -266,6 +266,43 @@ function persistChat() {
     error: el.classList.contains("error")
   }));
   saveState({ messages: msgs });
+}
+
+
+async function maybeAutoSelfLearn() {
+  try {
+    const key = "hessin-auto-learn-day";
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(key) === today) return;
+    // لا نشغّل تلقائياً إن كان المستخدم يكتب الآن
+    if (document.hidden) return;
+    localStorage.setItem(key, today);
+    const thinking = addMessage({ text: "أطور نفسي بدورة تعلّم قصيرة…", who: "ai" });
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "تعلم لوحدك",
+        sessionId: sessionId(),
+        memory: loadMemory(),
+        history: []
+      })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      thinking.body.textContent = friendlyError(data.error || "تعذر التعلّم الذاتي الآن.");
+      thinking.root.classList.add("error");
+      return;
+    }
+    if (data.memory) saveMemory(data.memory);
+    thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت دورة التعلّم.");
+    if (data.steps) {
+      /* steps already may show via addMessage path — refresh simply */
+    }
+    persistChat();
+  } catch {
+    /* صامت — التعلّم التلقائي لا يجب أن يزعج */
+  }
 }
 
 function showWelcome() {
