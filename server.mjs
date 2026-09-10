@@ -27,7 +27,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.13.1";
+const VERSION = "2.14.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -374,10 +374,112 @@ function formatLessons(memory) {
   return raw.split(" || ").map((line, i) => `${i + 1}. ${line}`).join("\n");
 }
 
+const EVOLUTION_ALLOWED_KEYS = new Set([
+  "style", "focus", "priority", "avoid", "trade_tip", "reply_length", "search_bias"
+]);
+
+function parseEvolution(memory) {
+  const raw = String(memory?.self_evolution || "").trim();
+  if (!raw) return { rules: [], version: 0, updated: "" };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { rules: [], version: 0, updated: "" };
+    const rules = Array.isArray(parsed.rules) ? parsed.rules : [];
+    const clean = [];
+    for (const rule of rules.slice(-20)) {
+      if (!rule || typeof rule !== "object") continue;
+      const key = String(rule.key || "").slice(0, 40);
+      const value = String(rule.value || "").replace(/\s+/g, " ").trim().slice(0, 180);
+      if (!EVOLUTION_ALLOWED_KEYS.has(key) || !value) continue;
+      clean.push({ key, value, at: String(rule.at || "").slice(0, 10) });
+    }
+    return {
+      rules: clean,
+      version: Number(parsed.version) || clean.length,
+      updated: String(parsed.updated || "").slice(0, 32)
+    };
+  } catch {
+    return { rules: [], version: 0, updated: "" };
+  }
+}
+
+function saveEvolution(session, evo) {
+  const payload = {
+    version: Number(evo.version) || evo.rules.length,
+    updated: evo.updated || new Date().toISOString(),
+    rules: (evo.rules || []).slice(-20),
+    note: "تطوّر سلوكي آمن فقط — لا تعديل لكود المستودع من داخل التطبيق"
+  };
+  session.memory.self_evolution = JSON.stringify(payload).slice(0, 6000);
+  session.memory.self_evolution_version = String(payload.version);
+  session.memory.self_evolution_updated = String(payload.updated).slice(0, 32);
+}
+
+function evolutionPromptBlock(memory) {
+  const evo = parseEvolution(memory);
+  if (!evo.rules.length) return "لا توجد قواعد تطوّر ذاتي بعد.";
+  return evo.rules.map((r, i) => `${i + 1}. [${r.key}] ${r.value}`).join("\n");
+}
+
+function applySelfEvolutionFromLessons(session, searchContext) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const evo = parseEvolution(session.memory);
+  const learnLine = (String(searchContext).match(/ما تعلمناه اليوم:\s*(.+)/i) || [])[1];
+  const numbered = [...String(searchContext).matchAll(/(?:^|\n)\s*\d+[\).\-–]\s*(.+)/g)].map((m) => m[1].trim()).filter(Boolean);
+  const candidates = [];
+  if (learnLine) candidates.push(learnLine);
+  candidates.push(...numbered.slice(0, 5));
+  let added = 0;
+  for (const raw of candidates) {
+    const text = String(raw).replace(/\s+/g, " ").trim().slice(0, 180);
+    if (!text) continue;
+    let key = "focus";
+    if (/سعر|دولار|ذهب|نفط|شحن|تجار/i.test(text)) key = "trade_tip";
+    else if (/جوجل|SEO|ظهور|بحث/i.test(text)) key = "search_bias";
+    else if (/اختصر|طويل|قصير|فصحى|أسلوب/i.test(text)) key = "style";
+    else if (/تجنّب|تجنب|لا |حرام|خطر/i.test(text)) key = "avoid";
+    else if (/أولوي|أهم/i.test(text)) key = "priority";
+    if (evo.rules.some((r) => r.value.slice(0, 60) === text.slice(0, 60))) continue;
+    evo.rules.push({ key, value: text, at: stamp });
+    added += 1;
+  }
+  while (evo.rules.length > 20) evo.rules.shift();
+  if (added) {
+    evo.version = (Number(evo.version) || 0) + added;
+    evo.updated = new Date().toISOString();
+    saveEvolution(session, evo);
+    session.log.push({ type: "memory", key: "self_evolution" });
+  }
+  // اقتراح تحسين كود للمدربة — نص فقط، بدون دفع Git
+  const proposal = String(learnLine || numbered[0] || "").replace(/\s+/g, " ").trim().slice(0, 220);
+  if (proposal) {
+    const prev = String(session.memory.code_ideas || "");
+    const ideas = prev ? prev.split(" || ").filter(Boolean) : [];
+    const idea = `${stamp} · اقتراح تحسين: ${proposal}`;
+    if (!ideas.some((x) => x.includes(proposal.slice(0, 50)))) {
+      ideas.push(idea);
+      while (ideas.length > 8) ideas.shift();
+      session.memory.code_ideas = ideas.join(" || ").slice(0, 2500);
+      session.log.push({ type: "memory", key: "code_ideas" });
+    }
+  }
+  return added;
+}
+
+function isEvolutionView(message) {
+  const t = String(message || "").trim();
+  return /^(?:تطوري|تطوّري|قواعد التطور|عرض التطور|ماذا تطورت)\s*[؟?]?$/i.test(t);
+}
+
+function isCodeIdeasView(message) {
+  const t = String(message || "").trim();
+  return /^(?:أفكار الكود|اقتراحات الكود|تحسينات معلقة)\s*[؟?]?$/i.test(t);
+}
+
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 80) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -390,7 +492,7 @@ async function runSimpleReply(message, history) {
     messages: [
       {
         role: "system",
-        content: "أنت Hessin AI. رد بالعربية الفصحى الواضحة بجملة أو جملتين قصيرتين ودّيتين. لا تستخدم أدوات. لا تطوّل."
+        content: "أنت Hessin AI. مهم: تطوّرك الذاتي سلوك وذاكرة وقواعد فقط — لا تدّعِ أنك دفعت كوداً إلى GitHub وحدك، ولا تطلب مفاتيح Git.. رد بالعربية الفصحى الواضحة بجملة أو جملتين قصيرتين ودّيتين. لا تستخدم أدوات. لا تطوّل."
       },
       ...historyMsgs,
       { role: "user", content: message }
@@ -572,7 +674,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -804,7 +906,7 @@ async function runAgentLoop({ message, session, approved, searchContext, history
       ? `نتائج بحث حديثة (اعتمد عليها وأعد صياغة عربية مرتبة إن لزم):\n${searchContext}`
       : "",
     Object.keys(session.memory).length
-      ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}\nدروس التعلّم الذاتي (طبّقها عند الصلة): ${formatLessons(session.memory)}`
+      ? `الذاكرة الحالية: ${JSON.stringify(session.memory)}\nدروس التعلّم الذاتي (طبّقها عند الصلة): ${formatLessons(session.memory)}\nقواعد التطوّر الذاتي (إلزامية عند الصلة): ${evolutionPromptBlock(session.memory)}`
       : ""
   ].filter(Boolean).join("\n\n");
 
@@ -897,6 +999,33 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
+    if (isEvolutionView(message)) {
+      return res.json({
+        text: "قواعد التطوّر الذاتي (سلوك فقط، بدون تعديل كود المستودع تلقائياً):\n" + evolutionPromptBlock(session.memory) + "\n\nالإصدار: " + (session.memory.self_evolution_version || "0"),
+        steps: [{ type: "memory", text: "عرض قواعد التطوّر" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq"
+      });
+    }
+
+    if (isCodeIdeasView(message)) {
+      const ideas = String(session.memory.code_ideas || "").trim();
+      return res.json({
+        text: ideas
+          ? "اقتراحات تحسين للكود (للمراجعة عبر المدربة، لا تُدفع وحدها):\n" + ideas.split(" || ").map((l, i) => `${i + 1}. ${l}`).join("\n")
+          : "لا توجد اقتراحات كود بعد. شغّل «تعلم لوحدك» لتوليد أفكار.",
+        steps: [{ type: "memory", text: "عرض اقتراحات الكود" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq"
+      });
+    }
+
     const local = handleMemoryCommand(message, session);
     if (local) {
       return res.json({
@@ -950,6 +1079,7 @@ app.post("/api/chat", async (req, res) => {
           session.log.push({ type: "memory", key: "x_news_last" });
           steps.push({ type: "memory", text: "حفظ تعلّم من أخبار X" });
           if (appendLesson(session, summary, "x_news")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
+          applySelfEvolutionFromLessons(session, summary || searchContext);
         }
         if (isGoogleAlgo(message)) {
           session.memory.google_algo_last_date = stamp;
@@ -958,6 +1088,7 @@ app.post("/api/chat", async (req, res) => {
           session.log.push({ type: "memory", key: "google_algo_last" });
           steps.push({ type: "memory", text: "حفظ تعلّم من خوارزميات جوجل" });
           if (appendLesson(session, summary, "google_algo")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
+          applySelfEvolutionFromLessons(session, summary || searchContext);
         }
         if (isSelfLearn(message)) {
           // Extract numbered lessons + summary into self_lessons
@@ -970,6 +1101,9 @@ app.post("/api/chat", async (req, res) => {
           session.memory.self_learn_last_date = stamp;
           session.memory.self_learn_last = summary;
           steps.push({ type: "memory", text: added ? `تعلّم ذاتي: حُفظ ${added} درس` : "تعلّم ذاتي: لا دروس جديدة مكررة" });
+          const evoAdded = applySelfEvolutionFromLessons(session, searchContext);
+          if (evoAdded) steps.push({ type: "memory", text: `تطوّر سلوكي: +${evoAdded} قاعدة` });
+          steps.push({ type: "plan", text: "تغيير كود المستودع يبقى بمراجعة المدربة — لا دفع Git تلقائي من التطبيق" });
         }
       }
 
@@ -1048,7 +1182,9 @@ app.get("/health", (_req, res) => {
     xNewsLearn: true,
     googleAlgoLearn: true,
     securityHardened: true,
-    selfLearn: true
+    selfLearn: true,
+    selfEvolve: true,
+    autoCodePush: false
   });
 });
 
