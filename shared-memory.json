@@ -1,28 +1,35 @@
 {
-  "version": 5,
-  "updated": "2026-09-10T11:16:45Z",
+  "version": 6,
+  "updated": "2026-09-10T11:49:20Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
-    "note": "ذاكرة فريق واحدة؛ أمثلة عامة غير مرتبطة بالفرامل/الورش"
+    "live": "https://lunar-breeze-dawn-ember.grok.me",
+    "legacy": "https://hessin-ai.vercel.app",
+    "note": "مرتبطان: المدربة + Hessin AI v3 على grok.me (grok-4.5، بث SSE). Vercel تراث."
   },
   "facts": {
     "owner": "Hessin Adam",
     "focus": "مساعد عام للمشروع والمحتوى والتجارة عند الحاجة — بدون التركيز على قطع الفرامل أو الورش",
-    "site": "https://hessin-ai.vercel.app",
+    "site": "https://lunar-breeze-dawn-ember.grok.me",
     "repo": "https://github.com/r82k5bvz66-rgb/-Hessin-AI",
     "reply_style": "عربية فصحى عامة واضحة؛ أحدث عبر البحث عند الحاجة؛ لمسة سودانية عند المناسبة",
     "providers": "groq افتراضي؛ grok و pair عند توفر XAI_API_KEY",
     "safety": "user_protection: لا أسرار، لا تحويل/نشر بلا موافقة، لا دفع Git من التطبيق",
-    "coach_role": "المدربة تحسّن الكود على GitHub؛ التطبيق يتعلّم ويحفظ دروساً وسلوكاً",
+    "coach_role": "المدربة تحسّن الكود/التوجيه؛ التطبيق الحي على grok.me يتعلّم ويحفظ دروساً",
     "learn_together": "المدربة + Hessin AI يحدّثان shared-memory والدروس معاً",
     "gen_algo": "التوليد = تخمين متسلسل للكلمة التالية (Transformer + سياق + عيّنة/حرارة)",
     "diffusion": "انتشار الصور: ضوضاء→إزالة تدريجية موجهة بالنص",
     "image_gen_command": "صورة: وصف... (توليد تجريبي)",
-    "example_style": "أمثلة عامة ومحايدة؛ لا تستخدم أمثلة فرامل/ورش إلا إذا طلب المستخدم ذلك"
+    "example_style": "أمثلة عامة ومحايدة؛ لا تستخدم أمثلة فرامل/ورش إلا إذا طلب المستخدم ذلك",
+    "site_legacy": "https://hessin-ai.vercel.app",
+    "version_live": "3.0",
+    "model_live": "grok-4.5",
+    "pair_status": "linked_2026-09-10"
   },
   "lessons": [
+    "2026-09-10 · فريق: رُبطت المدربة مع Hessin AI v3 على lunar-breeze-dawn-ember.grok.me",
     "2026-09-10 · فريق: تحسين Core Web Vitals يرفع الظهور وسرعة الموقع",
     "2026-09-10 · فريق: استخدم AI لتحليل نية العميل ومحتوى الأسئلة الشائعة",
     "2026-09-10 · تجارة: مسار أرقين مصر-سودان قد يتأخر؛ وثّق الفواتير وجهّز خلوص مسبق",
