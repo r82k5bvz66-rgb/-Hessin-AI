@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.24.0). النسخة الأساسية الحية: https://lunar-breeze-dawn-ember.grok.me";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.24.1). النسخة الأساسية الحية (3.1): https://hazel-palm-cosmic-pepper.grok.me — السابقة (3.0): https://lunar-breeze-dawn-ember.grok.me";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
