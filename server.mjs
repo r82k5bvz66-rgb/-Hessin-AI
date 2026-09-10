@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.19.0";
+const VERSION = "2.20.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -64,7 +64,7 @@ app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    "default-src 'self'; img-src 'self' data: blob: https://image.pollinations.ai https://*.pollinations.ai; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   );
   const orig = res.json.bind(res);
   res.json = (body) => {
@@ -381,7 +381,7 @@ function needsWebSearch(message) {
   // أحدث/أعم: فعّل البحث للأسئلة العامة والمعاصرة وليس فقط التقارير المخصصة
   if (/(?:اليوم|الآن|حاليا|حالياً|آخر|احدث|أحدث|جديد|update|latest|today|now|202[4-9]|خبر|أخبار|سعر|أسعار|سوق|شحن|جمارك|ترند)/i.test(t)) return true;
   if (t.length >= 24 && /(?:ما هو|ما هي|كيف|لماذا|هل|اشرح|وضح|وضّح|قارن|أفضل|افضل|يعني إيه|يعني ايه)/i.test(t)) return true;
-  return /(?:خوارزميات التوليد|خوارزمية التوليد|تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
+  return /(?:خوارزميات الانتشار|انتشار الصور|diffusion|خوارزميات التوليد|خوارزمية التوليد|تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -429,8 +429,49 @@ function builtinGenAlgoExplain() {
 
 function isGenAlgo(message) {
   const t = String(message || "").trim();
-  return /(?:خوارزميات التوليد|خوارزمية التوليد|كيف يولّد|كيف يولد|توليد النصوص|next.?token|transformer|LLM|نموذج لغوي|آلية التوليد|generative algorithm)/i.test(t)
+  return /(?:خوارزميات الانتشار|انتشار الصور|diffusion|خوارزميات التوليد|خوارزمية التوليد|كيف يولّد|كيف يولد|توليد النصوص|next.?token|transformer|LLM|نموذج لغوي|آلية التوليد|generative algorithm)/i.test(t)
     || /^(?:التوليد|شرح التوليد)$/i.test(t);
+}
+
+
+function builtinDiffusionExplain() {
+  return `خوارزميات الانتشار للصور (Diffusion) — شرح عام:
+
+1) نبدأ من ضوضاء عشوائية (شوشة)، ثم نزيل الضوضاء خطوة بخطوة حتى تظهر صورة متماسكة.
+2) النص (الـ prompt) يوجّه كل خطوة: ماذا يظهر، الأسلوب، الإضاءة، والتكوين.
+3) كلما زادت خطوات الإزالة غالباً زادت التفاصيل (أبطأ)، والخطوات القليلة أسرع وأبسط.
+4) نماذج شهيرة تبني على نفس الفكرة (مثل عائلات Stable Diffusion وأشباهها) مع اختلاف التدريب والواجهة.
+5) جودة الناتج تعتمد على وضوح الـ prompt: موضوع + أسلوب + تفاصيل مفيدة، بدون حشو متناقض.
+6) للتاجر: ولّد صورة منتج/إعلان تجريبي، ثم راجعها قبل النشر (قد تخطئ في الكتابة داخل الصورة).
+
+لتجربة التوليد عندي اكتب: صورة: فرامل شاحنة على خلفية ورشة نظيفة إضاءة سينمائية
+
+ما تعلمناه اليوم: انتشار الصور يبدأ من ضوضاء ويُنظَّف تدريجياً بتجويه النص حتى تكتمل الصورة.`;
+}
+
+function isDiffusionAlgo(message) {
+  const t = String(message || "").trim();
+  return /(?:خوارزميات الانتشار|خوارزمية الانتشار|انتشار الصور|diffusion|stable diffusion|كيف تُولَّد الصور|كيف تولد الصور)/i.test(t)
+    || /^(?:الانتشار|شرح الانتشار)$/i.test(t);
+}
+
+function isImageGen(message) {
+  const t = String(message || "").trim();
+  return /^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة)\s*[:：\-]?\s*.+/i.test(t)
+    || /^(?:generate image|image)\s*[:：\-]?\s*.+/i.test(t);
+}
+
+
+function buildImageUrl(prompt) {
+  const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
+  // خدمة عامة بدون مفتاح — مناسبة للتعلم والتجربة
+  return `https://image.pollinations.ai/prompt/${q}?width=1024&height=1024&nologo=true`;
+}
+
+function extractImagePrompt(message) {
+  const t = String(message || "").trim();
+  const m = t.match(/^(?:ولّد صورة|ولد صورة|إنشاء صورة|انشئ صورة|توليد صورة|صورة|generate image|image)\s*[:：\-]?\s*(.+)$/i);
+  return (m ? m[1] : t).trim().slice(0, 500);
 }
 
 function isSelfLearn(message) {
@@ -579,7 +620,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -839,7 +880,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -900,6 +941,17 @@ function searchSystemPrompt(message) {
 6) قسم «خطوة مقترحة اليوم:» بجملة واحدة.
 7) إذا نقصت أرقام حديثة مؤكدة، اكتب بصراحة: «بعض الأرقام تقديرية أو تقريبية بسبب نقص بيانات مباشرة.»
 8) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
+  }
+
+  if (isDiffusionAlgo(message)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `أنت Hessin AI. اشرح بالعربية الفصحى الواضحة.
+المطلوب بتاريخ ${today}: شرح خوارزميات انتشار الصور (Diffusion) لغير المتخصص + فائدة للتاجر.
+القواعد:
+1) اشرح: ضوضاء ← إزالة تدريجية، دور الـ prompt، الخطوات، ولماذا تخطئ النماذج أحياناً في النصوص داخل الصورة.
+2) 5–7 نقاط + مثال prompt تجاري بسيط.
+3) اختم بـ «ما تعلمناه اليوم:» جملة للحفظ.
+4) اذكر أن المستخدم يكتب «صورة: ...» لتوليد صورة تجريبية.`;
   }
 
   if (isGenAlgo(message)) {
@@ -1008,7 +1060,9 @@ async function runGeneralDigest(message) {
                 ? "تعلّم ذاتي"
                 : isGenAlgo(message)
                   ? "خوارزميات التوليد"
-                  : "ملخص";
+                  : isDiffusionAlgo(message)
+                    ? "خوارزميات الانتشار"
+                    : "ملخص";
   const completion = await client.chat.completions.create({
     model: resolveModel(),
     messages: [
@@ -1213,7 +1267,9 @@ app.post("/api/chat", async (req, res) => {
         provider: "groq",
         sharedMemory: true,
     generalFreshReplies: true,
-    genAlgoExplain: true
+    genAlgoExplain: true,
+    diffusionExplain: true,
+    imageGen: true
       });
     }
 
@@ -1257,6 +1313,36 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
+    // توليد صورة تجريبي: صورة: وصف...
+    if (isImageGen(message)) {
+      const prompt = extractImagePrompt(message);
+      if (!prompt) {
+        return res.status(400).json({ error: "اكتب وصفاً بعد «صورة:» مثل: صورة: فرامل شاحنة في ورشة." });
+      }
+      const url = buildImageUrl(prompt);
+      session.memory.image_last_prompt = prompt.slice(0, 280);
+      session.memory.image_last_url = url.slice(0, 500);
+      session.memory.image_last_date = new Date().toISOString().slice(0, 10);
+      session.log.push({ type: "image", prompt: prompt.slice(0, 120) });
+      if (appendLesson(session, `صورة: تعلّم صياغة وصف مرئي — ${prompt.slice(0, 120)}`, "image_gen")) {
+        /* ok */
+      }
+      const text = `توليد صورة (تجريبي عبر نموذج انتشار عام):\n\n**الوصف:** ${prompt}\n\n![صورة مولّدة](${url})\n\nنصيحة: كن محدداً (المنتج، المكان، الإضاءة، الأسلوب). راجع النتيجة قبل استخدامها إعلانياً.`;
+      return res.json({
+        text,
+        steps: [
+          { type: "plan", text: "توليد صورة" },
+          { type: "memory", text: "حفظ آخر وصف صورة" }
+        ],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "pollinations",
+        imageUrl: url
+      });
+    }
+
     // مزوّد Grok مباشر: { message, provider: "grok", password? }
     if (provider === "grok") {
       const history = normalizeHistory(req.body?.history);
@@ -1297,7 +1383,7 @@ app.post("/api/chat", async (req, res) => {
     const steps = [];
     let searchContext = "";
     let searchMode = "";
-    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message) || isSelfLearn(message) || isGenAlgo(message);
+    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message) || isSelfLearn(message) || isGenAlgo(message) || isDiffusionAlgo(message);
 
     if (needsWebSearch(message) || digestOnly) {
       const searched = await runSearchWithFallback(message, steps);
@@ -1310,6 +1396,11 @@ app.post("/api/chat", async (req, res) => {
       searchContext = builtinGenAlgoExplain();
       searchMode = searchMode || "builtin_gen_algo";
       steps.push({ type: "plan", text: "شرح توليدي أساسي من ذاكرة الفريق" });
+    }
+    if (digestOnly && isDiffusionAlgo(message) && !String(searchContext || "").trim()) {
+      searchContext = builtinDiffusionExplain();
+      searchMode = searchMode || "builtin_diffusion";
+      steps.push({ type: "plan", text: "شرح انتشار الصور من ذاكرة الفريق" });
     }
 
     if (digestOnly && searchContext) {
@@ -1342,6 +1433,15 @@ app.post("/api/chat", async (req, res) => {
           session.log.push({ type: "memory", key: "gen_algo_last" });
           steps.push({ type: "memory", text: "حفظ تعلّم خوارزميات التوليد" });
           if (appendLesson(session, summary, "gen_algo")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
+          applySelfEvolutionFromLessons(session, summary || searchContext);
+        }
+        if (isDiffusionAlgo(message)) {
+          session.memory.diffusion_algo_last_date = stamp;
+          session.memory.diffusion_algo_last = summary;
+          session.memory.diffusion_algo_source = searchMode || "builtin";
+          session.log.push({ type: "memory", key: "diffusion_algo_last" });
+          steps.push({ type: "memory", text: "حفظ تعلّم خوارزميات الانتشار" });
+          if (appendLesson(session, summary, "diffusion")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
           applySelfEvolutionFromLessons(session, summary || searchContext);
         }
         if (isSelfLearn(message)) {
@@ -1461,8 +1561,10 @@ app.get("/health", (_req, res) => {
     sharedMemory: true,
     generalFreshReplies: true,
     genAlgoExplain: true,
+    diffusionExplain: true,
+    imageGen: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.19.0-gen-algo"
+    release: "2.20.0-diffusion-images"
   });
 });
 

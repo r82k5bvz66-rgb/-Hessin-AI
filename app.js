@@ -19,7 +19,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.19.0: اكتب «خوارزميات التوليد» لشرح كيف تولّد النماذج النص. أو «ذاكرة الفريق».";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.20.0: «خوارزميات الانتشار» للشرح، و«صورة: وصف...» لتوليد صورة تجريبية.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -244,6 +244,11 @@ function renderMarkdown(text) {
   let s = escapeHtml(text);
   s = s.replace(/```([\s\S]*?)```/g, (_, code) => "<pre><code>" + code + "</code></pre>");
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // صور آمنة من https فقط (بعد escape تتحول الأقواس كما هي للنص)
+  s = s.replace(/!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g, (_, alt, url) => {
+    const safeAlt = alt || "صورة";
+    return '<img class="gen-image" src="' + url + '" alt="' + safeAlt + '" loading="lazy" />';
+  });
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/^(?:- |\* )(.+)$/gm, "<li>$1</li>");
   s = s.replace(/(?:<li>.*<\/li>\n?)+/g, (block) => "<ul>" + block + "</ul>");

@@ -395,3 +395,13 @@ button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .status.ok { color: #3ddc97; }
 .status.error { color: #ff7b7b; }
+
+
+.gen-image {
+  display: block;
+  max-width: min(100%, 420px);
+  width: 100%;
+  border-radius: 12px;
+  margin: 10px 0;
+  border: 1px solid rgba(255,255,255,0.08);
+}
