@@ -245,9 +245,10 @@ function renderMarkdown(text) {
   s = s.replace(/```([\s\S]*?)```/g, (_, code) => "<pre><code>" + code + "</code></pre>");
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
   // صور آمنة من https فقط (بعد escape تتحول الأقواس كما هي للنص)
-  s = s.replace(/!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g, (_, alt, url) => {
+  s = s.replace(/!\[([^\]]*)\]\(((?:https:\/\/|\/)[^)\s]+)\)/g, (_, alt, url) => {
     const safeAlt = alt || "صورة";
-    return '<img class="gen-image" src="' + url + '" alt="' + safeAlt + '" loading="lazy" />';
+    // بعد escapeHtml قد تصبح & إلى &amp; وهذا صحيح داخل خاصية HTML
+    return '<img class="gen-image" src="' + url + '" alt="' + safeAlt + '" loading="lazy" referrerpolicy="no-referrer" />';
   });
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/^(?:- |\* )(.+)$/gm, "<li>$1</li>");
@@ -509,6 +510,18 @@ async function sendChat(text, { approved } = {}) {
       setStatus("error", "خطأ");
     } else {
       thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت الخطوات، لكن لم يصل رد نصي.");
+      if (data.imageUrl) {
+        const existing = thinking.body.querySelector("img.gen-image");
+        if (!existing) {
+          const img = document.createElement("img");
+          img.className = "gen-image";
+          img.alt = "صورة مولّدة";
+          img.loading = "lazy";
+          img.referrerPolicy = "no-referrer";
+          img.src = data.imageUrl;
+          thinking.body.appendChild(img);
+        }
+      }
       // clear old step chips if any then add
       thinking.root.querySelectorAll(".steps,.files").forEach((el) => el.remove());
       if (data.steps && data.steps.length) {

@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.20.0";
+const VERSION = "2.20.1";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -64,7 +64,7 @@ app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; img-src 'self' data: blob: https://image.pollinations.ai https://*.pollinations.ai; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   );
   const orig = res.json.bind(res);
   res.json = (body) => {
@@ -464,8 +464,15 @@ function isImageGen(message) {
 
 function buildImageUrl(prompt) {
   const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
-  // خدمة عامة بدون مفتاح — مناسبة للتعلم والتجربة
-  return `https://image.pollinations.ai/prompt/${q}?width=1024&height=1024&nologo=true`;
+  // رابط نفس الموقع (proxy) حتى لا يمنع CSP عرض الصورة في المحادثة
+  return `/api/image?prompt=${q}&w=1024&h=1024`;
+}
+
+function buildUpstreamImageUrl(prompt, w = 1024, h = 1024) {
+  const q = encodeURIComponent(String(prompt || "product photo").slice(0, 500));
+  const width = Math.min(Math.max(Number(w) || 1024, 256), 1280);
+  const height = Math.min(Math.max(Number(h) || 1024, 256), 1280);
+  return `https://image.pollinations.ai/prompt/${q}?width=${width}&height=${height}&nologo=true`;
 }
 
 function extractImagePrompt(message) {
@@ -1197,6 +1204,31 @@ async function runAgentLoop({ message, session, approved, searchContext, history
   return { text: finalText, steps };
 }
 
+
+app.get("/api/image", async (req, res) => {
+  try {
+    const prompt = String(req.query?.prompt || "").trim().slice(0, 500);
+    if (!prompt) return res.status(400).json({ error: "prompt required" });
+    const upstream = buildUpstreamImageUrl(prompt, req.query?.w, req.query?.h);
+    const r = await fetch(upstream, {
+      headers: { "User-Agent": "HessinAI/2.20.1", Accept: "image/*,*/*" },
+      redirect: "follow"
+    });
+    if (!r.ok) {
+      return res.status(502).json({ error: "تعذر توليد الصورة الآن." });
+    }
+    const ctype = r.headers.get("content-type") || "image/jpeg";
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.setHeader("Content-Type", ctype);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.send(buf);
+  } catch (err) {
+    console.error(err);
+    return res.status(502).json({ error: "تعذر توليد الصورة الآن." });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
@@ -1564,7 +1596,7 @@ app.get("/health", (_req, res) => {
     diffusionExplain: true,
     imageGen: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.20.0-diffusion-images"
+    release: "2.20.1-image-proxy"
   });
 });
 
