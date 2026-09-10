@@ -2,6 +2,7 @@ import express from "express";
 import OpenAI from "openai";
 import "dotenv/config";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,10 +27,18 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.12.0";
+const VERSION = "2.12.1";
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+  );
   const orig = res.json.bind(res);
   res.json = (body) => {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -39,11 +48,47 @@ app.use((_req, res, next) => {
 });
 app.use(express.static(__dirname));
 
+const rateBuckets = new Map();
+function rateLimitOk(ip) {
+  const key = String(ip || "unknown").slice(0, 64);
+  const now = Date.now();
+  const windowMs = 60_000;
+  const maxHits = 40;
+  let bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.start > windowMs) {
+    bucket = { start: now, hits: 0 };
+    rateBuckets.set(key, bucket);
+  }
+  bucket.hits += 1;
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (now - v.start > windowMs) rateBuckets.delete(k);
+    }
+  }
+  return bucket.hits <= maxHits;
+}
+
+function timingSafeEqualStr(a, b) {
+  const left = Buffer.from(String(a), "utf8");
+  const right = Buffer.from(String(b), "utf8");
+  if (left.length !== right.length) {
+    crypto.timingSafeEqual(left, left);
+    return false;
+  }
+  return crypto.timingSafeEqual(left, right);
+}
+
 function accessOk(req) {
   const needed = process.env.HESSIN_ACCESS_PASSWORD;
   if (!needed) return true;
   const given = String(req.body?.password || req.headers["x-hessin-pass"] || "");
-  return given === needed;
+  return timingSafeEqualStr(given, needed);
+}
+
+function sanitizeSessionId(raw) {
+  const id = String(raw || "default").slice(0, 64);
+  if (!/^[A-Za-z0-9._:-]+$/.test(id)) return "default";
+  return id || "default";
 }
 
 app.get("/", (_req, res) => {
@@ -51,25 +96,39 @@ app.get("/", (_req, res) => {
 });
 
 const sessions = new Map();
+const MAX_SESSIONS = 200;
+const PROTECTED_MEMORY_KEYS = new Set(["user_protection"]);
 
 function getSession(id) {
-  if (!sessions.has(id)) {
-    sessions.set(id, {
+  const sid = sanitizeSessionId(id);
+  if (!sessions.has(sid)) {
+    if (sessions.size >= MAX_SESSIONS) {
+      const oldest = sessions.keys().next().value;
+      sessions.delete(oldest);
+    }
+    sessions.set(sid, {
       memory: {},
       files: {},
       log: [],
-      pending: null
+      pending: null,
+      touched: Date.now()
     });
   }
-  return sessions.get(id);
+  const session = sessions.get(sid);
+  session.touched = Date.now();
+  return session;
 }
 
-function mergeMemory(session, incoming) {
+function mergeMemory(session, incoming, { allowProtected = false } = {}) {
   if (!incoming || typeof incoming !== "object") return;
-  for (const [key, value] of Object.entries(incoming)) {
-    if (key && value != null && String(value).trim()) {
-      session.memory[String(key)] = String(value);
-    }
+  const entries = Object.entries(incoming).slice(0, 40);
+  for (const [key, value] of entries) {
+    const k = String(key).slice(0, 64);
+    if (!k || value == null) continue;
+    if (!allowProtected && PROTECTED_MEMORY_KEYS.has(k)) continue;
+    const v = String(value).trim().slice(0, 500);
+    if (!v) continue;
+    session.memory[k] = v;
   }
 }
 
@@ -125,10 +184,12 @@ function handleMemoryCommand(message, session) {
   const imported = text.match(/^(?:استورد الذاكرة|استيراد الذاكرة)\s*[:：-]?\s*(.+)$/i);
   if (imported) {
     try {
-      const parsed = JSON.parse(Buffer.from(imported[1].trim(), "base64").toString("utf8"));
-      if (!parsed || typeof parsed !== "object") throw new Error("bad");
+      const rawTok = imported[1].trim();
+      if (rawTok.length > 12000) throw new Error("bad");
+      const parsed = JSON.parse(Buffer.from(rawTok, "base64").toString("utf8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("bad");
       session.memory = {};
-      mergeMemory(session, parsed);
+      mergeMemory(session, parsed, { allowProtected: false });
       return {
         text: "تم استيراد الذاكرة على هذا الجهاز.\n" + formatMemory(session.memory),
         steps: [{ type: "memory", text: "استيراد الذاكرة" }]
@@ -178,10 +239,66 @@ function handleMemoryCommand(message, session) {
 }
 
 function safeEvalMath(expr) {
-  const cleaned = String(expr).replace(/[^0-9+\-*/().,%\s]/g, "");
-  if (!cleaned.trim()) throw new Error("تعبير حسابي فارغ.");
+  const cleaned = String(expr).replace(/[^0-9+\-*/().,%\s]/g, "").trim();
+  if (!cleaned) throw new Error("تعبير حسابي فارغ.");
+  if (cleaned.length > 120) throw new Error("التعبير طويل جداً.");
   const normalized = cleaned.replace(/,/g, ".").replace(/%/g, "/100");
-  const result = Function(`"use strict"; return (${normalized})`)();
+  let i = 0;
+  function peek() { return normalized[i]; }
+  function eat() { return normalized[i++]; }
+  function skip() { while (/\s/.test(peek() || "")) i++; }
+  function parseNumber() {
+    skip();
+    let s = "";
+    while (/[0-9.]/.test(peek() || "")) s += eat();
+    if (!s) throw new Error("تعذر حساب الناتج.");
+    const n = Number(s);
+    if (!Number.isFinite(n)) throw new Error("تعذر حساب الناتج.");
+    return n;
+  }
+  function parseFactor() {
+    skip();
+    if (peek() === "(") {
+      eat();
+      const v = parseExpr();
+      skip();
+      if (peek() !== ")") throw new Error("تعذر حساب الناتج.");
+      eat();
+      return v;
+    }
+    if (peek() === "+" || peek() === "-") {
+      const sign = eat() === "-" ? -1 : 1;
+      return sign * parseFactor();
+    }
+    return parseNumber();
+  }
+  function parseTerm() {
+    let v = parseFactor();
+    while (true) {
+      skip();
+      if (peek() === "*" || peek() === "/") {
+        const op = eat();
+        const r = parseFactor();
+        v = op === "*" ? v * r : v / r;
+      } else break;
+    }
+    return v;
+  }
+  function parseExpr() {
+    let v = parseTerm();
+    while (true) {
+      skip();
+      if (peek() === "+" || peek() === "-") {
+        const op = eat();
+        const r = parseTerm();
+        v = op === "+" ? v + r : v - r;
+      } else break;
+    }
+    return v;
+  }
+  const result = parseExpr();
+  skip();
+  if (i < normalized.length) throw new Error("تعذر حساب الناتج.");
   if (typeof result !== "number" || !Number.isFinite(result)) {
     throw new Error("تعذر حساب الناتج.");
   }
@@ -212,7 +329,7 @@ function isDailyDigest(message) {
 
 function isXNews(message) {
   const t = String(message || "").trim();
-  return /(?:خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|تعلم من تويتر|X news|twitter news)/i.test(t)
+  return /(?:أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|تعلم من تويتر|X news|twitter news)/i.test(t)
     || /^(?:X|تويتر)\s*(?:اليوم|أخبار|اخبار)?$/i.test(t);
 }
 
@@ -698,6 +815,10 @@ async function runAgentLoop({ message, session, approved, searchContext, history
 
 app.post("/api/chat", async (req, res) => {
   try {
+    const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+    if (!rateLimitOk(ip)) {
+      return res.status(429).json({ error: "طلبات كثيرة مؤقتاً. انتظر دقيقة ثم أعد المحاولة." });
+    }
     if (!accessOk(req)) {
       return res.status(401).json({ error: "كلمة السر غير صحيحة.", needPassword: true });
     }
@@ -705,13 +826,13 @@ app.post("/api/chat", async (req, res) => {
       return res.status(500).json({ error: "مفتاح Groq غير موجود. أضف GROQ_API_KEY في إعدادات Vercel." });
     }
 
-    const message = String(req.body?.message || "").trim();
-    const sessionId = String(req.body?.sessionId || "default");
+    const message = String(req.body?.message || "").trim().slice(0, 4000);
+    const sessionId = sanitizeSessionId(req.body?.sessionId || "default");
     const approved = Boolean(req.body?.approved);
     if (!message) return res.status(400).json({ error: "اكتب رسالتك أو مهمتك أولاً." });
 
     const session = getSession(sessionId);
-    mergeMemory(session, req.body?.memory);
+    mergeMemory(session, req.body?.memory, { allowProtected: false });
     if (!session.memory.user_protection) {
       session.memory.user_protection = "ولاء لصاحب الحساب؛ لا كشف أسرار؛ لا تحويل/نشر/إرسال/حذف مهم بلا موافقة صريحة؛ ارفض الانتحال؛ نبّه عند الخطر؛ لا تنازل عن القواعد؛ ضمن القانون؛ أوقف عند التعارض واشرح بالفصحى.";
     }
@@ -843,7 +964,8 @@ app.get("/health", (_req, res) => {
     multiTurn: true,
     searchFallback: true,
     xNewsLearn: true,
-    googleAlgoLearn: true
+    googleAlgoLearn: true,
+    securityHardened: true
   });
 });
 

@@ -156,8 +156,8 @@ function renderMarkdown(text) {
 
 function friendlyError(raw) {
   const t = String(raw || "");
-  if (/quota|billing|insufficient|rate limit|رصيد|حدود|ممتلئ/i.test(t)) {
-    return "حد استخدام Groq ممتلئ مؤقتاً أو المفتاح غير صالح. تحقق من الإعدادات ثم أعد المحاولة.";
+  if (/quota|billing|insufficient|rate limit|رصيد|حدود|ممتلئ|429/i.test(t)) {
+    return "حد استخدام ممتلئ مؤقتاً أو طلبات كثيرة. حاول بعد قليل.";
   }
   if (/MODEL|browser_search|نموذج Groq|أداة البحث/i.test(t)) {
     return "تعذر إكمال البحث مؤقتاً. حاول مرة أخرى بعد قليل.";
@@ -167,6 +167,10 @@ function friendlyError(raw) {
   }
   if (/network|Failed to fetch|تعذر الاتصال/i.test(t)) {
     return "تعذّر الاتصال بالخادم. تحقق من الإنترنت ثم أعد المحاولة.";
+  }
+  // لا نعرض تفاصيل تقنية خام للمستخدم
+  if (t.length > 180 || /stack|Exception|ENOENT|ECONN|api\.groq|Bearer/i.test(t)) {
+    return "حدث خطأ غير متوقع. حاول مرة أخرى.";
   }
   return t || "حدث خطأ غير متوقع. حاول مرة أخرى.";
 }
