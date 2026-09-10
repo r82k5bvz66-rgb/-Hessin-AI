@@ -1,4 +1,4 @@
-const CACHE = "hessin-ai-v2241";
+const CACHE = "hessin-ai-v2242";
 const ASSETS = ["/", "/index.html", "/style.css", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
