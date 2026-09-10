@@ -391,3 +391,7 @@ button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
   z-index: 3;
 }
 .jump-latest.hidden { display: none; }
+
+
+.status.ok { color: #3ddc97; }
+.status.error { color: #ff7b7b; }

@@ -17,7 +17,7 @@ const STORAGE_KEY = "hessin-ai-v2";
 const MEMORY_KEY = "hessin-ai-memory";
 
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب «تعلم لوحدك» ليتطور سلوكه وقواعده لوحده، و«تطوري» لعرضها، و«أفكار الكود» للاقتراحات. تعديل كود GitHub لا يتم تلقائياً من الموقع (أمان).";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nتحديث 2.15.0: اتصال أوضح + كلمة المرور تُطلب فقط إن فُعّلت. اكتب «تعلم لوحدك» أو «دروسي» أو «تطوري».";
 
 
 function setupNetBanner() {
@@ -87,7 +87,9 @@ function setAccessPassword(value) {
 }
 
 async function ensureAccessPassword(force) {
+  if (!serverMeta.passwordRequired && !force) return getAccessPassword();
   if (!force && getAccessPassword()) return getAccessPassword();
+  if (!serverMeta.passwordRequired && !force) return "";
   const entered = window.prompt("أدخل كلمة مرور Hessin AI:", getAccessPassword() || "");
   if (entered == null) return getAccessPassword();
   setAccessPassword(entered);
@@ -130,7 +132,10 @@ async function postChat(extra, signal) {
   }
   let result = await once(false);
   if (result.r.status === 401 || result.data.needPassword) {
-    result = await once(true);
+    await refreshHealth();
+    if (serverMeta.passwordRequired) {
+      result = await once(true);
+    }
   }
   return result;
 }
@@ -185,6 +190,26 @@ function setStatus(kind, label) {
   statusEl.className = "status " + kind;
   statusEl.textContent = "● " + label;
 }
+
+let serverMeta = { version: "", passwordRequired: false };
+
+async function refreshHealth() {
+  try {
+    const r = await fetch("/health", { cache: "no-store" });
+    const data = await r.json();
+    serverMeta.version = data.version || "";
+    serverMeta.passwordRequired = Boolean(data.passwordRequired);
+    if (serverMeta.version) {
+      setStatus("ok", "متصل · v" + serverMeta.version);
+    }
+    return data;
+  } catch {
+    setStatus("error", "غير متصل");
+    return null;
+  }
+}
+
+
 
 function escapeHtml(s) {
   return String(s)
