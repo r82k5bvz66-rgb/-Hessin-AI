@@ -17,7 +17,7 @@ const STORAGE_KEY = "hessin-ai-v2";
 const MEMORY_KEY = "hessin-ai-memory";
 
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب مهمتك مباشرة في المربع. الأوامر مثل تجارة اليوم أو تقرير أسعار تعمل بالكتابة.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب مهمتك مباشرة. مثال: أخبار X — ليتعلّم من ترندات منصة X ويحفظ ملخصًا.";
 
 
 function setupNetBanner() {

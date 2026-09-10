@@ -26,7 +26,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.10.1";
+const VERSION = "2.11.0";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -190,7 +190,7 @@ function safeEvalMath(expr) {
 
 function needsWebSearch(message) {
   const t = String(message || "");
-  return /(?:ملخص يومي|موجز اليوم|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report)/i.test(t);
+  return /(?:أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -208,6 +208,12 @@ function isPriceReport(message) {
 function isDailyDigest(message) {
   const t = String(message || "").trim();
   return /^(?:ملخص يومي|موجز اليوم|تقرير اليوم)$/i.test(t);
+}
+
+function isXNews(message) {
+  const t = String(message || "").trim();
+  return /(?:أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|تعلم من تويتر|X news|twitter news)/i.test(t)
+    || /^(?:X|تويتر)\s*(?:اليوم|أخبار|اخبار)?$/i.test(t);
 }
 
 function isSimpleChat(message) {
@@ -408,7 +414,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -470,6 +476,20 @@ function searchSystemPrompt(message) {
 7) إذا نقصت أرقام حديثة مؤكدة، اكتب بصراحة: «بعض الأرقام تقديرية أو تقريبية بسبب نقص بيانات مباشرة.»
 8) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
   }
+
+  if (isXNews(message)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: موجز «أخبار X / تويتر» بتاريخ ${today} عبر البحث.
+التركيز: ما يتداول على منصة X حول التجارة العالمية، أسعار، شحن، السودان/الجوار، وذكاء اصطناعي مفيد للتاجر.
+القواعد:
+1) استخدم البحث وجوباً عن نقاشات/ترندات X أو تغطية أخبار من X.
+2) 4 إلى 6 نقاط فقط؛ لكل نقطة: الموضوع، ماذا يُقال باختصار، ولماذا يهم تاجر/صاحب مشروع.
+3) إن ظهرت أسماء حسابات أو وسوم مفيدة اذكرها بدون تشجيع على الشائعات.
+4) اختم بـ «ما تعلمناه اليوم:» بجملة واحدة عملية تُحفظ في الذاكرة.
+5) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
+  }
+
   if (isDailyDigest(message)) {
     const today = new Date().toISOString().slice(0, 10);
     return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
@@ -518,7 +538,9 @@ async function runGeneralDigest(message) {
         ? "تقرير أسعار"
         : isDailyDigest(message)
           ? "ملخص يومي"
-          : "ملخص";
+          : isXNews(message)
+            ? "أخبار X"
+            : "ملخص";
   const completion = await client.chat.completions.create({
     model: resolveModel(),
     messages: [
@@ -704,7 +726,7 @@ app.post("/api/chat", async (req, res) => {
     const steps = [];
     let searchContext = "";
     let searchMode = "";
-    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message);
+    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message);
 
     if (needsWebSearch(message) || digestOnly) {
       const searched = await runSearchWithFallback(message, steps);
@@ -714,6 +736,15 @@ app.post("/api/chat", async (req, res) => {
     }
 
     if (digestOnly && searchContext) {
+      if (isXNews(message)) {
+        const learnLine = (searchContext.match(/ما تعلمناه اليوم:\s*(.+)/i) || [])[1];
+        const stamp = new Date().toISOString().slice(0, 10);
+        session.memory.x_news_last_date = stamp;
+        session.memory.x_news_last = String(learnLine || searchContext).replace(/\s+/g, " ").trim().slice(0, 280);
+        session.memory.x_news_source = searchMode || "search";
+        session.log.push({ type: "memory", key: "x_news_last" });
+        steps.push({ type: "memory", text: "حفظ تعلّم من أخبار X" });
+      }
       return res.json({
         text: searchContext,
         steps,
@@ -779,7 +810,8 @@ app.get("/health", (_req, res) => {
     search: "groq_browser_search",
     dailyDigest: true,
     multiTurn: true,
-    searchFallback: true
+    searchFallback: true,
+    xNewsLearn: true
   });
 });
 
