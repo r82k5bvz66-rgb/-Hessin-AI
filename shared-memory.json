@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "updated": "2026-09-10T09:38:18Z",
+  "pair": {
+    "coach": "مدربة مشروعي Hessin Ai",
+    "app": "Hessin AI",
+    "mode": "shared_memory",
+    "note": "ذاكرة فريق واحدة: المدربة + Hessin AI"
+  },
+  "facts": {
+    "owner": "Hessin Adam",
+    "focus": "تجارة قطع فرامل DOSA لشاحنات وباصات نحو السودان + محتوى TikTok",
+    "site": "https://hessin-ai.vercel.app",
+    "repo": "https://github.com/r82k5bvz66-rgb/-Hessin-AI",
+    "reply_style": "عربية فصحى مع لمسة سودانية عند المناسبة",
+    "providers": "groq افتراضي؛ grok و pair عند توفر XAI_API_KEY",
+    "safety": "user_protection: لا أسرار، لا تحويل/نشر بلا موافقة، لا دفع Git من التطبيق",
+    "coach_role": "المدربة تحسّن الكود على GitHub؛ التطبيق يتعلّم ويحفظ دروساً وسلوكاً"
+  },
+  "lessons": []
+}

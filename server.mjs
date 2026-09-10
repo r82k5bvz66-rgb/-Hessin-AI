@@ -2,6 +2,7 @@ import express from "express";
 import OpenAI from "openai";
 import "dotenv/config";
 import path from "path";
+import fs from "fs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 
@@ -53,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.16.0";
+const VERSION = "2.17.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -120,6 +121,50 @@ function sanitizeSessionId(raw) {
 app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
+
+
+function loadSharedMemoryFile() {
+  try {
+    const p = path.join(__dirname, "shared-memory.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function sharedFactsToMemory(shared) {
+  const out = {};
+  if (!shared || typeof shared !== "object") return out;
+  out.team_pair = "مدربة مشروعي Hessin Ai + Hessin AI";
+  out.shared_memory = "1";
+  if (shared.updated) out.shared_updated = String(shared.updated).slice(0, 32);
+  const facts = shared.facts && typeof shared.facts === "object" ? shared.facts : {};
+  for (const [k, v] of Object.entries(facts).slice(0, 30)) {
+    if (v == null) continue;
+    out[`shared_${k}`] = String(v).slice(0, 500);
+  }
+  if (Array.isArray(shared.lessons) && shared.lessons.length) {
+    out.shared_lessons = shared.lessons.slice(-12).map((x) => String(x).slice(0, 200)).join(" || ").slice(0, 3500);
+  }
+  if (shared.pair && shared.pair.note) out.shared_pair_note = String(shared.pair.note).slice(0, 240);
+  return out;
+}
+
+function mergeSharedIntoSession(session) {
+  const shared = loadSharedMemoryFile();
+  if (!shared) return false;
+  const mapped = sharedFactsToMemory(shared);
+  for (const [k, v] of Object.entries(mapped)) {
+    if (!v) continue;
+    // لا نكتب فوق دروس الجلسة المحلية إلا للمفاتيح shared_*
+    session.memory[k] = v;
+  }
+  return true;
+}
+
 
 const sessions = new Map();
 const MAX_SESSIONS = 200;
@@ -376,6 +421,11 @@ function isLessonsView(message) {
   return /^(?:دروسي|ما تعلمته|دروس التعلم|عرض الدروس|ماذا تعلمت)\s*[؟?]?$/i.test(t);
 }
 
+function isSharedMemoryView(message) {
+  const t = String(message || "").trim();
+  return /^(?:ذاكرة الفريق|الذاكرة المشتركة|ذاكرتنا|زامن الذاكرة|عرض الذاكرة المشتركة)\s*[؟?]?$/i.test(t);
+}
+
 function appendLesson(session, lesson, source) {
   const stamp = new Date().toISOString().slice(0, 10);
   const clean = String(lesson || "").replace(/\s+/g, " ").trim().slice(0, 280);
@@ -505,7 +555,7 @@ function isCodeIdeasView(message) {
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 80) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1081,6 +1131,7 @@ app.post("/api/chat", async (req, res) => {
 
     const session = getSession(sessionId);
     mergeMemory(session, req.body?.memory, { allowProtected: false });
+    mergeSharedIntoSession(session);
     if (!session.memory.user_protection) {
       session.memory.user_protection = "ولاء لصاحب الحساب؛ لا كشف أسرار؛ لا تحويل/نشر/إرسال/حذف مهم بلا موافقة صريحة؛ ارفض الانتحال؛ نبّه عند الخطر؛ لا تنازل عن القواعد؛ ضمن القانون؛ أوقف عند التعارض واشرح بالفصحى.";
     }
@@ -1093,6 +1144,36 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq"
+      });
+    }
+
+    if (isSharedMemoryView(message)) {
+      const shared = loadSharedMemoryFile();
+      const lines = [];
+      lines.push("ذاكرة الفريق (المدربة + Hessin AI):");
+      if (!shared) {
+        lines.push("لا يوجد ملف shared-memory.json بعد.");
+      } else {
+        lines.push("آخر تحديث: " + (shared.updated || "—"));
+        if (shared.pair?.note) lines.push(String(shared.pair.note));
+        const facts = shared.facts || {};
+        for (const [k, v] of Object.entries(facts)) {
+          lines.push(`- ${k}: ${v}`);
+        }
+        if (Array.isArray(shared.lessons) && shared.lessons.length) {
+          lines.push("دروس مشتركة:");
+          shared.lessons.slice(-12).forEach((l, i) => lines.push(`${i + 1}. ${l}`));
+        }
+      }
+      return res.json({
+        text: lines.join("\n"),
+        steps: [{ type: "memory", text: "عرض ذاكرة الفريق" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq",
+        sharedMemory: true
       });
     }
 
@@ -1322,7 +1403,9 @@ app.get("/health", (_req, res) => {
     grokConfigured: Boolean(grokKey),
     grokModel: grokKey ? GROK_MODEL : null,
     providers: ["groq", "grok", "pair"],
-    release: "2.16.0-grok-provider"
+    sharedMemory: true,
+    pairedCoach: "مدربة مشروعي Hessin Ai",
+    release: "2.17.0-shared-memory"
   });
 });
 

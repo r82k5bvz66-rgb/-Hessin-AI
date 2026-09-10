@@ -8,7 +8,10 @@
         "includeFiles": [
           "index.html",
           "app.js",
-          "style.css"
+          "style.css",
+          "shared-memory.json",
+          "manifest.webmanifest",
+          "sw.js"
         ]
       }
     }
