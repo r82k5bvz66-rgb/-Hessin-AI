@@ -31,10 +31,18 @@
       </div>
     </header>
 
+    <div id="netBanner" class="net-banner hidden" role="status">لا يوجد اتصال بالإنترنت</div>
     <div id="memoryBanner" class="memory-banner hidden" role="status"></div>
+    <div id="installTip" class="install-tip hidden" role="region">
+      <p>ثبّت Hessin AI على الشاشة الرئيسية لتجربة أسرع مثل التطبيق.</p>
+      <button type="button" id="installDismiss" class="install-dismiss">حسناً</button>
+    </div>
     </div>
 
-    <section id="chat" class="chat" aria-live="polite"></section>
+    <div class="chat-wrap">
+      <section id="chat" class="chat" aria-live="polite"></section>
+      <button type="button" id="jumpLatest" class="jump-latest hidden" aria-label="إلى آخر رسالة">↓</button>
+    </div>
     <div id="pending" class="pending hidden"></div>
 
     <div class="dock">

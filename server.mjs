@@ -26,7 +26,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.10.0";
+const VERSION = "2.10.1";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {

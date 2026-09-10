@@ -6,6 +6,10 @@ const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
 const memoryBanner = document.getElementById("memoryBanner");
+const netBanner = document.getElementById("netBanner");
+const installTip = document.getElementById("installTip");
+const installDismiss = document.getElementById("installDismiss");
+const jumpLatest = document.getElementById("jumpLatest");
 const stopBtn = document.getElementById("stop");
 let activeAbort = null;
 
@@ -14,6 +18,63 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 
 const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nاكتب مهمتك مباشرة في المربع. الأوامر مثل تجارة اليوم أو تقرير أسعار تعمل بالكتابة.";
+
+
+function setupNetBanner() {
+  if (!netBanner) return;
+  const sync = () => {
+    if (navigator.onLine) netBanner.classList.add("hidden");
+    else netBanner.classList.remove("hidden");
+  };
+  window.addEventListener("online", sync);
+  window.addEventListener("offline", sync);
+  sync();
+}
+
+function setupInstallTip() {
+  if (!installTip) return;
+  const key = "hessin-install-tip-dismissed";
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+    || window.navigator.standalone === true;
+  if (isStandalone || localStorage.getItem(key) === "1") {
+    installTip.classList.add("hidden");
+    return;
+  }
+  installTip.classList.remove("hidden");
+  if (installDismiss) {
+    installDismiss.onclick = () => {
+      localStorage.setItem(key, "1");
+      installTip.classList.add("hidden");
+    };
+  }
+}
+
+function setupJumpLatest() {
+  if (!chat || !jumpLatest) return;
+  const sync = () => {
+    const gap = chat.scrollHeight - chat.scrollTop - chat.clientHeight;
+    if (gap > 120) jumpLatest.classList.remove("hidden");
+    else jumpLatest.classList.add("hidden");
+  };
+  chat.addEventListener("scroll", sync, { passive: true });
+  jumpLatest.onclick = () => {
+    chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
+  };
+  sync();
+}
+
+function setupKeyboardAvoidance() {
+  if (!window.visualViewport) return;
+  const vv = window.visualViewport;
+  const apply = () => {
+    document.documentElement.style.setProperty("--vvh", vv.height + "px");
+    const appEl = document.querySelector(".app");
+    if (appEl) appEl.style.height = vv.height + "px";
+  };
+  vv.addEventListener("resize", apply);
+  vv.addEventListener("scroll", apply);
+  apply();
+}
 
 function sessionId() {
   let id = localStorage.getItem("hessin-session-id");
