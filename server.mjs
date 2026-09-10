@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.18.0";
+const VERSION = "2.19.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -381,7 +381,7 @@ function needsWebSearch(message) {
   // أحدث/أعم: فعّل البحث للأسئلة العامة والمعاصرة وليس فقط التقارير المخصصة
   if (/(?:اليوم|الآن|حاليا|حالياً|آخر|احدث|أحدث|جديد|update|latest|today|now|202[4-9]|خبر|أخبار|سعر|أسعار|سوق|شحن|جمارك|ترند)/i.test(t)) return true;
   if (t.length >= 24 && /(?:ما هو|ما هي|كيف|لماذا|هل|اشرح|وضح|وضّح|قارن|أفضل|افضل|يعني إيه|يعني ايه)/i.test(t)) return true;
-  return /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
+  return /(?:خوارزميات التوليد|خوارزمية التوليد|تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|تحليل جوجل|تحديث جوجل|SEO|خوارزمية جوجل|أخبار X|اخبار X|أخبار تويتر|اخبار تويتر|منصة X|تعلم من X|AI اليوم|ذكاء اصطناعي اليوم|تقنيات AI|جديد الذكاء|تجارة اليوم|التجارة العالمية|أسواق اليوم|تقرير أسعار|تقرير اسعار|ملخص يومي|موجز اليوم|ابحث|بحث|أخبار|اسعار|أسعار|سعر|دولار|ذهب|نفط|latest|news|today|price report|twitter|\\bx\\b)/i.test(t);
 }
 
 function isAiDigest(message) {
@@ -411,6 +411,26 @@ function isGoogleAlgo(message) {
   const t = String(message || "").trim();
   return /(?:خوارزميات جوجل|خوارزمية جوجل|تحليل جوجل|تحديث جوجل|تحديثات جوجل|تحليل SEO|سيو جوجل|Google algorithm|core update|helpful content)/i.test(t)
     || /^(?:جوجل|Google)\s*(?:SEO|سيو|خوارزم(?:ية|يات)?|تحديث(?:ات)?)?$/i.test(t);
+}
+
+
+function builtinGenAlgoExplain() {
+  return `خوارزميات التوليد (لنماذج مثل Hessin AI / Grok) — شرح عام:
+
+1) النموذج لا «يفكر» كإنسان؛ يخمّن الكلمة/الرمز التالي الأنسب بعد ما قرأ ما قبله (next-token prediction).
+2) المعمارية الشائعة اليوم Transformer: تنتبه لأجزاء مهمة من النص السابق لتربط المعنى.
+3) السياق (context window): مقدار النص الذي يراه في الرد الواحد؛ الأطول ليس دائماً أوضح.
+4) عند الاستخدام (inference) نختار من الاحتمالات: درجة الحرارة العالية = ردود أكثر تنوّعاً، والمنخفضة = أكثر ثباتاً وحذراً.
+5) التدريب سابقاً على بيانات ضخمة؛ أما ردّك الآن فيعتمد على تعليمات النظام + ذاكرتك + أي بحث حي.
+6) للتاجر: استخدمه لصياغة عروض وأجوبة شائعة، ثم راجع الأرقام والأسعار بنفسك قبل النشر.
+
+ما تعلمناه اليوم: التوليد تخمين متسلسل للكلمة التالية وفق السياق والاحتمال، لا نسخ أعمى لحقائق لحظية بلا بحث.`;
+}
+
+function isGenAlgo(message) {
+  const t = String(message || "").trim();
+  return /(?:خوارزميات التوليد|خوارزمية التوليد|كيف يولّد|كيف يولد|توليد النصوص|next.?token|transformer|LLM|نموذج لغوي|آلية التوليد|generative algorithm)/i.test(t)
+    || /^(?:التوليد|شرح التوليد)$/i.test(t);
 }
 
 function isSelfLearn(message) {
@@ -559,7 +579,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -819,7 +839,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -880,6 +900,18 @@ function searchSystemPrompt(message) {
 6) قسم «خطوة مقترحة اليوم:» بجملة واحدة.
 7) إذا نقصت أرقام حديثة مؤكدة، اكتب بصراحة: «بعض الأرقام تقديرية أو تقريبية بسبب نقص بيانات مباشرة.»
 8) لا تذكر رموز اقتباس داخلية من أدوات البحث.`;
+  }
+
+  if (isGenAlgo(message)) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `أنت Hessin AI تعلّمت مع المدربة. اشرح بالعربية الفصحى الواضحة جداً (أعمّ وأحدث).
+المطلوب بتاريخ ${today}: شرح «خوارزميات التوليد» لنماذج اللغة (LLM) لغير المتخصص، مع فائدة عملية لصاحب مشروع.
+القواعد:
+1) استخدم البحث إن لزم لتأكيد مصطلحات حديثة، لكن اجعل الشرح أساسياً وواضحاً حتى بدون تفاصيل بحث طويلة.
+2) غطِّ باختصار: التنبؤ بالرمز التالي (next-token)، المحوّل Transformer، السياق/النافذة، ودرجة الحرارة/العيّنة (temperature/sampling)، والفرق بين تدريب النموذج واستخدامه (inference).
+3) 5 إلى 7 نقاط مرقّمة + مثال بسيط من التجارة أو كتابة محتوى.
+4) اختم بـ «ما تعلمناه اليوم:» جملة واحدة للحفظ في ذاكرة الفريق.
+5) لا تدّعِ فهم أسرار داخلية مغلقة للنموذج؛ اشرح المبدأ العام.`;
   }
 
   if (isSelfLearn(message)) {
@@ -974,7 +1006,9 @@ async function runGeneralDigest(message) {
               ? "خوارزميات جوجل"
               : isSelfLearn(message)
                 ? "تعلّم ذاتي"
-                : "ملخص";
+                : isGenAlgo(message)
+                  ? "خوارزميات التوليد"
+                  : "ملخص";
   const completion = await client.chat.completions.create({
     model: resolveModel(),
     messages: [
@@ -1178,7 +1212,8 @@ app.post("/api/chat", async (req, res) => {
         version: VERSION,
         provider: "groq",
         sharedMemory: true,
-    generalFreshReplies: true
+    generalFreshReplies: true,
+    genAlgoExplain: true
       });
     }
 
@@ -1262,13 +1297,19 @@ app.post("/api/chat", async (req, res) => {
     const steps = [];
     let searchContext = "";
     let searchMode = "";
-    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message) || isSelfLearn(message);
+    const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message) || isSelfLearn(message) || isGenAlgo(message);
 
     if (needsWebSearch(message) || digestOnly) {
       const searched = await runSearchWithFallback(message, steps);
       searchContext = searched.text;
       searchMode = searched.mode || "";
       session.log.push({ type: "search", query: message.slice(0, 120), mode: searchMode });
+    }
+
+    if (digestOnly && isGenAlgo(message) && !String(searchContext || "").trim()) {
+      searchContext = builtinGenAlgoExplain();
+      searchMode = searchMode || "builtin_gen_algo";
+      steps.push({ type: "plan", text: "شرح توليدي أساسي من ذاكرة الفريق" });
     }
 
     if (digestOnly && searchContext) {
@@ -1292,6 +1333,15 @@ app.post("/api/chat", async (req, res) => {
           session.log.push({ type: "memory", key: "google_algo_last" });
           steps.push({ type: "memory", text: "حفظ تعلّم من خوارزميات جوجل" });
           if (appendLesson(session, summary, "google_algo")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
+          applySelfEvolutionFromLessons(session, summary || searchContext);
+        }
+        if (isGenAlgo(message)) {
+          session.memory.gen_algo_last_date = stamp;
+          session.memory.gen_algo_last = summary;
+          session.memory.gen_algo_source = searchMode || "builtin";
+          session.log.push({ type: "memory", key: "gen_algo_last" });
+          steps.push({ type: "memory", text: "حفظ تعلّم خوارزميات التوليد" });
+          if (appendLesson(session, summary, "gen_algo")) steps.push({ type: "memory", text: "أُضيف لسجل التعلّم الذاتي" });
           applySelfEvolutionFromLessons(session, summary || searchContext);
         }
         if (isSelfLearn(message)) {
@@ -1410,8 +1460,9 @@ app.get("/health", (_req, res) => {
     providers: ["groq", "grok", "pair"],
     sharedMemory: true,
     generalFreshReplies: true,
+    genAlgoExplain: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.18.0-general-fresh"
+    release: "2.19.0-gen-algo"
   });
 });
 
