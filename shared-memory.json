@@ -1,13 +1,13 @@
 {
   "version": 6,
-  "updated": "2026-09-10T11:49:20Z",
+  "updated": "2026-09-10T11:54:09Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
     "live": "https://lunar-breeze-dawn-ember.grok.me",
     "legacy": "https://hessin-ai.vercel.app",
-    "note": "مرتبطان: المدربة + Hessin AI v3 على grok.me (grok-4.5، بث SSE). Vercel تراث."
+    "note": "مرتبطان: المدربة + Hessin AI v3 على grok.me (grok-4.5، بث SSE). Vercel تراث (2.24.0 + تنبيه)."
   },
   "facts": {
     "owner": "Hessin Adam",
@@ -26,9 +26,12 @@
     "site_legacy": "https://hessin-ai.vercel.app",
     "version_live": "3.0",
     "model_live": "grok-4.5",
-    "pair_status": "linked_2026-09-10"
+    "pair_status": "linked_2026-09-10",
+    "version_legacy": "2.24.0",
+    "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية على grok.me"
   },
   "lessons": [
+    "2026-09-10 · فريق: Vercel تراث 2.24.0 مع تنبيه للنسخة الحية على lunar-breeze-dawn-ember.grok.me",
     "2026-09-10 · فريق: رُبطت المدربة مع Hessin AI v3 على lunar-breeze-dawn-ember.grok.me",
     "2026-09-10 · فريق: تحسين Core Web Vitals يرفع الظهور وسرعة الموقع",
     "2026-09-10 · فريق: استخدم AI لتحليل نية العميل ومحتوى الأسئلة الشائعة",
