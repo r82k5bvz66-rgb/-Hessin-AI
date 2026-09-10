@@ -76,6 +76,24 @@ function setupKeyboardAvoidance() {
   apply();
 }
 
+function getAccessPassword() {
+  return localStorage.getItem("hessin-access-pass") || "";
+}
+
+function setAccessPassword(value) {
+  const v = String(value || "").trim();
+  if (v) localStorage.setItem("hessin-access-pass", v);
+  else localStorage.removeItem("hessin-access-pass");
+}
+
+async function ensureAccessPassword(force) {
+  if (!force && getAccessPassword()) return getAccessPassword();
+  const entered = window.prompt("أدخل كلمة مرور Hessin AI:", getAccessPassword() || "");
+  if (entered == null) return getAccessPassword();
+  setAccessPassword(entered);
+  return getAccessPassword();
+}
+
 function sessionId() {
   let id = localStorage.getItem("hessin-session-id");
   if (!id) {
@@ -84,6 +102,39 @@ function sessionId() {
   }
   return id;
 }
+
+function buildChatBody(extra) {
+  return Object.assign({
+    message: "",
+    sessionId: sessionId(),
+    memory: loadMemory(),
+    history: [],
+    password: getAccessPassword()
+  }, extra || {});
+}
+
+async function postChat(extra, signal) {
+  async function once(forcePass) {
+    if (forcePass) await ensureAccessPassword(true);
+    const body = buildChatBody(extra);
+    const headers = { "Content-Type": "application/json; charset=utf-8" };
+    if (body.password) headers["x-hessin-pass"] = body.password;
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal
+    });
+    const data = await r.json().catch(() => ({}));
+    return { r, data };
+  }
+  let result = await once(false);
+  if (result.r.status === 401 || result.data.needPassword) {
+    result = await once(true);
+  }
+  return result;
+}
+
 
 function loadState() {
   try {
@@ -278,17 +329,7 @@ async function maybeAutoSelfLearn() {
     if (document.hidden) return;
     localStorage.setItem(key, today);
     const thinking = addMessage({ text: "أطور نفسي بدورة تعلّم قصيرة…", who: "ai" });
-    const r = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: "تعلم لوحدك",
-        sessionId: sessionId(),
-        memory: loadMemory(),
-        history: []
-      })
-    });
-    const data = await r.json().catch(() => ({}));
+    const { r, data } = await postChat({ message: "تعلم لوحدك", history: [] });
     if (!r.ok) {
       thinking.body.textContent = friendlyError(data.error || "تعذر التعلّم الذاتي الآن.");
       thinking.root.classList.add("error");
@@ -400,19 +441,11 @@ async function sendChat(text, { approved } = {}) {
   const thinking = addMessage({ text: "جارٍ التنفيذ… أبحث وأرتّب الرد بالعربية.", who: "ai" });
 
   try {
-    const memory = loadMemory();
-    const r = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        message,
-        sessionId: sessionId(),
-        memory,
-        history: recentHistory(8),
-        approved: Boolean(approved)
-      })
+    const { r, data } = await postChat({
+      message,
+      history: recentHistory(8),
+      approved: Boolean(approved)
     });
-    const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       thinking.root.classList.add("error");
       thinking.body.textContent = friendlyError(data.error);
@@ -499,6 +532,7 @@ input.addEventListener("input", resizeInput);
 clearBtn.addEventListener("click", () => {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem("hessin-session-id");
+  // لا نمسح كلمة المرور تلقائياً عند مسح المحادثة
   // keep MEMORY_KEY so memory persists across new chats
   showPending(null);
   showWelcome();

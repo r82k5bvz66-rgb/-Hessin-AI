@@ -27,7 +27,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.14.0";
+const VERSION = "2.14.1";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -1184,7 +1184,8 @@ app.get("/health", (_req, res) => {
     securityHardened: true,
     selfLearn: true,
     selfEvolve: true,
-    autoCodePush: false
+    autoCodePush: false,
+    accessPasswordUi: true
   });
 });
 
