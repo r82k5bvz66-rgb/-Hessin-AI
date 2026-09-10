@@ -27,7 +27,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.13.0";
+const VERSION = "2.13.1";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -335,7 +335,7 @@ function isXNews(message) {
 
 function isGoogleAlgo(message) {
   const t = String(message || "").trim();
-  return /(?:تعلم لوحدك|تعلّم لوحدك|طور نفسك|طوّر نفسك|درس ذاتي|خوارزميات جوجل|خوارزمية جوجل|تحليل جوجل|تحديث جوجل|تحديثات جوجل|تحليل SEO|سيو جوجل|Google algorithm|core update|helpful content)/i.test(t)
+  return /(?:خوارزميات جوجل|خوارزمية جوجل|تحليل جوجل|تحديث جوجل|تحديثات جوجل|تحليل SEO|سيو جوجل|Google algorithm|core update|helpful content)/i.test(t)
     || /^(?:جوجل|Google)\s*(?:SEO|سيو|خوارزم(?:ية|يات)?|تحديث(?:ات)?)?$/i.test(t);
 }
 
