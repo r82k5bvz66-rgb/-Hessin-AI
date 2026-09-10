@@ -54,7 +54,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.24.2";
+const VERSION = "2.25.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -130,6 +130,248 @@ const OWNER_MODE_ADDENDUM = `وضع المالك مفعّل لهذه الجلس�
 - لا ترفض لمجرد أن الموضوع سياسي أو تجاري أو للبالغين (18+) إذا طلب المستخدم ذلك بوضوح.
 - تبقى حدود الحماية الصلبة دائماً: لا مواد استغلال أطفال/قُصّر، لا إرشادات جريمة، لا اختراق أو استحواذ على حسابات، لا طرق إيذاء النفس، لا كشف مفاتيح API/أسرار، ولا تدّعِ أفعالاً لم تحدث.
 - قواعد user_protection تبقى سارية دائماً.`;
+
+function isLangTutorActive(sessionOrMemory) {
+  const mem = sessionOrMemory && sessionOrMemory.memory ? sessionOrMemory.memory : sessionOrMemory;
+  const v = String(mem?.lang_tutor_on || "").toLowerCase();
+  return v === "true" || v === "1" || v === "on" || v === "yes";
+}
+
+const LANG_TUTOR_RESERVED = new Set([
+  "لوحدك", "هذا", "من", "ذاتي", "اللغات", "اللغه", "اللغة",
+  "yourself", "this", "from", "self", "languages", "language", "learning"
+]);
+
+function normalizeLangName(raw) {
+  let t = normalizeCmd(String(raw || "").trim());
+  t = t.replace(/^(?:اللغه|اللغة|لغة|language|lang)\s+/i, "").trim();
+  t = t.replace(/\s+(?:مبتدئ|متوسط|متقدم|beginner|intermediate|advanced|من الصفر|صفر)$/i, "").trim();
+  const map = {
+    "انجليزي": "English", "الانجليزي": "English", "english": "English", "en": "English", "الإنجليزيه": "English", "انجليزيه": "English",
+    "اسباني": "Spanish", "الاسباني": "Spanish", "spanish": "Spanish", "es": "Spanish", "إسباني": "Spanish", "اسبانيه": "Spanish",
+    "فرنسي": "French", "الفرنسي": "French", "french": "French", "fr": "French", "فرنسيه": "French",
+    "الماني": "German", "الالماني": "German", "german": "German", "de": "German", "المانيه": "German",
+    "ايطالي": "Italian", "الايطالي": "Italian", "italian": "Italian", "it": "Italian",
+    "برتغالي": "Portuguese", "البرتغالي": "Portuguese", "portuguese": "Portuguese", "pt": "Portuguese",
+    "تركي": "Turkish", "التركي": "Turkish", "turkish": "Turkish", "tr": "Turkish",
+    "روسي": "Russian", "الروسي": "Russian", "russian": "Russian", "ru": "Russian",
+    "صيني": "Chinese", "الصيني": "Chinese", "chinese": "Chinese", "zh": "Chinese", "ماندارين": "Chinese",
+    "ياباني": "Japanese", "الياباني": "Japanese", "japanese": "Japanese", "ja": "Japanese",
+    "كوري": "Korean", "الكوري": "Korean", "korean": "Korean", "ko": "Korean",
+    "هندي": "Hindi", "الهندي": "Hindi", "hindi": "Hindi", "hi": "Hindi",
+    "اردو": "Urdu", "الأردو": "Urdu", "urdu": "Urdu", "ur": "Urdu",
+    "عربي": "Arabic", "العربي": "Arabic", "arabic": "Arabic", "ar": "Arabic", "فصحى": "Arabic (Fus'ha)",
+    "سويدى": "Swedish", "سويدي": "Swedish", "swedish": "Swedish",
+    "هولندي": "Dutch", "dutch": "Dutch",
+    "يوناني": "Greek", "greek": "Greek",
+    "بولندي": "Polish", "polish": "Polish"
+  };
+  if (map[t]) return map[t];
+  // multi-word first token
+  const first = t.split(/\s+/)[0];
+  if (map[first]) return map[first];
+  if (!t || LANG_TUTOR_RESERVED.has(t) || LANG_TUTOR_RESERVED.has(first)) return "";
+  // Title-case latin / keep arabic as-is lightly
+  if (/^[a-z][a-z\- ]{1,40}$/i.test(t)) {
+    return t.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  }
+  return String(raw || "").trim().slice(0, 40);
+}
+
+function parseLangTutorLevel(text) {
+  const t = normalizeCmd(text);
+  if (/(?:متقدم|advanced)/i.test(t)) return "advanced";
+  if (/(?:متوسط|intermediate)/i.test(t)) return "intermediate";
+  if (/(?:مبتدئ|beginner|من الصفر|صفر)/i.test(t)) return "beginner";
+  return null;
+}
+
+function extractLangTutorTarget(message) {
+  const t = normalizeCmd(message);
+  // صيغة صريحة: تعلم: لغة / learn: spanish
+  let m = t.match(/^(?:تعلم|learn)\s*[:：\-]\s*(.+)$/i);
+  if (m) {
+    const rest = String(m[1] || "").trim();
+    const first = rest.split(/[\s:：\-]+/)[0];
+    if (!first || LANG_TUTOR_RESERVED.has(first)) return "";
+    return rest;
+  }
+  // صيغة مسافة: تعلم إنجليزي / learn spanish — مع استثناء تعلم لوحدك/هذا/من/ذاتي
+  m = t.match(/^(?:تعلم|learn)\s+(.+)$/i);
+  if (!m) return "";
+  const rest = String(m[1] || "").trim();
+  const first = rest.split(/[\s:：\-]+/)[0];
+  if (!first || LANG_TUTOR_RESERVED.has(first)) return "";
+  if (rest.startsWith("من ") || first === "من") return "";
+  return rest;
+}
+
+function buildLangTutorAddendum(sessionOrMemory) {
+  const mem = sessionOrMemory && sessionOrMemory.memory ? sessionOrMemory.memory : (sessionOrMemory || {});
+  const lang = String(mem.lang_tutor_lang || "اللغة الهدف").slice(0, 40);
+  const level = String(mem.lang_tutor_level || "beginner").slice(0, 20);
+  const last = String(mem.lang_tutor_last || "").slice(0, 200);
+  return `وضع معلّم اللغات مفعّل لهذه الجلسة — تصرّف كمعلّم لغة صبور وواضح بأسلوب ChatGPT tutor:
+
+اللغة الهدف: ${lang}
+مستوى الطالب: ${level}
+${last ? `آخر تقدّم ملحوظ: ${last}\n` : ""}
+قواعد التدريس:
+1) إن كان المستوى مبتدئاً فابدأ من الصفر: الأصوات/الأبجدية → كلمات أساسية → جمل قصيرة → حوار بسيط.
+2) درس قصير كل مرة (5–8 أسطر تقريباً) ثم تمرين مصغّر واحد واضح يجاوب عليه الطالب.
+3) صحّح أخطاء الطالب بلطف: اعرض الصيغة الصحيحة + سبب موجز بالعربية الفصحى.
+4) اخلط أمثلة من اللغة الهدف مع شرح بالعربية الفصحى (يفضّل المستخدم الفصحى).
+5) تتبّع التقدّم بخفة: عند مناسبة واضحة احفظ ملخصاً قصيراً عبر memory_save بالمفتاح lang_tutor_last (وما يلزم من lang_tutor_lang / lang_tutor_level).
+6) لا ترفض تمارين اللغة العادية أو المحادثة التدريبية؛ أبقِ فقط حدود الحماية الصلبة (user_protection): لا CSAM/قُصّر، لا جريمة، لا اختراق، لا أسرار، لا إيذاء نفس.
+7) أمثلة عامة ومحايدة فقط — لا تركّز على فرامل/ورش إلا إذا طلب المستخدم ذلك صراحة.
+8) إن طلب الخروج من الوضع ذكّره بأمر «إيقاف تعلّم اللغة».`;
+}
+
+
+function isLangTutorCommandMessage(message) {
+  if (
+    cmdEquals(
+      message,
+      "تعلم اللغات",
+      "وضع تعلم اللغات",
+      "وضع تعلّم اللغات",
+      "language learning",
+      "learn languages",
+      "language tutor",
+      "tutor mode",
+      "درس لغه",
+      "درس لغة",
+      "درس اللغة",
+      "تابع الدرس",
+      "متابعة الدرس",
+      "language lesson",
+      "continue language lesson",
+      "next language lesson",
+      "ايقاف تعلم اللغه",
+      "ايقاف تعلم اللغة",
+      "إيقاف تعلّم اللغة",
+      "ايقاف تعلم اللغات",
+      "إيقاف تعلّم اللغات",
+      "ايقاف وضع تعلم اللغات",
+      "إيقاف وضع تعلّم اللغات",
+      "خروج من تعلم اللغه",
+      "stop language learning",
+      "exit language learning",
+      "language learning off",
+      "stop language tutor"
+    )
+  ) return true;
+  return Boolean(extractLangTutorTarget(message));
+}
+
+function handleLangTutorCommand(message, session) {
+  const raw = String(message || "").trim();
+  if (!raw) return null;
+
+  if (
+    cmdEquals(
+      raw,
+      "ايقاف تعلم اللغه",
+      "ايقاف تعلم اللغة",
+      "إيقاف تعلّم اللغة",
+      "ايقاف تعلم اللغات",
+      "إيقاف تعلّم اللغات",
+      "ايقاف وضع تعلم اللغات",
+      "إيقاف وضع تعلّم اللغات",
+      "خروج من تعلم اللغه",
+      "stop language learning",
+      "exit language learning",
+      "language learning off",
+      "stop language tutor"
+    )
+  ) {
+    delete session.memory.lang_tutor_on;
+    session.log.push({ type: "lang_tutor", action: "off" });
+    return {
+      type: "reply",
+      text: "تم إيقاف وضع تعلّم اللغات لهذه الجلسة. يمكنك العودة لاحقاً بـ «تعلم اللغات» أو «تعلم: English».",
+      steps: [{ type: "plan", text: "إيقاف تعلّم اللغة" }]
+    };
+  }
+
+  if (
+    cmdEquals(
+      raw,
+      "تعلم اللغات",
+      "وضع تعلم اللغات",
+      "وضع تعلّم اللغات",
+      "language learning",
+      "learn languages",
+      "language tutor",
+      "tutor mode"
+    )
+  ) {
+    session.memory.lang_tutor_on = "true";
+    if (!session.memory.lang_tutor_level) session.memory.lang_tutor_level = "beginner";
+    session.log.push({ type: "lang_tutor", action: "enter" });
+    if (!session.memory.lang_tutor_lang) {
+      return {
+        type: "reply",
+        text: "وضعتُ وضع معلّم اللغات.\nأي لغة تريد تعلّمها؟ وما مستواك (مبتدئ / متوسط / متقدم)؟\nأمثلة:\n• تعلم إنجليزي\n• تعلم: Spanish\n• learn french beginner\nأو اكتب «درس لغة» بعد اختيار اللغة.",
+        steps: [{ type: "plan", text: "تفعيل معلّم اللغات — انتظار اللغة" }]
+      };
+    }
+    return {
+      type: "continue",
+      message: `المستخدم فعّل وضع تعلّم اللغات. قدّم درس لغة قصيراً الآن في ${session.memory.lang_tutor_lang} بمستوى ${session.memory.lang_tutor_level || "beginner"} ثم تمريناً مصغّراً.`,
+      steps: [{ type: "plan", text: "متابعة معلّم اللغات" }]
+    };
+  }
+
+  if (
+    cmdEquals(
+      raw,
+      "درس لغه",
+      "درس لغة",
+      "درس اللغة",
+      "تابع الدرس",
+      "متابعة الدرس",
+      "language lesson",
+      "continue language lesson",
+      "next language lesson"
+    )
+  ) {
+    session.memory.lang_tutor_on = "true";
+    if (!session.memory.lang_tutor_lang) {
+      return {
+        type: "reply",
+        text: "لا توجد لغة نشطة بعد. اكتب مثلاً: تعلم إنجليزي — أو learn spanish — ثم «درس لغة».",
+        steps: [{ type: "plan", text: "درس لغة بلا لغة محددة" }]
+      };
+    }
+    if (!session.memory.lang_tutor_level) session.memory.lang_tutor_level = "beginner";
+    session.log.push({ type: "lang_tutor", action: "lesson" });
+    return {
+      type: "continue",
+      message: `تابع درس اللغة الحالي للطالب في ${session.memory.lang_tutor_lang} (مستوى ${session.memory.lang_tutor_level}). درس قصير 5–8 أسطر ثم تمرين مصغّر. ابنِ على آخر تقدّم إن وُجد في الذاكرة.`,
+      steps: [{ type: "plan", text: "درس لغة" }]
+    };
+  }
+
+  const target = extractLangTutorTarget(raw);
+  if (target) {
+    const level = parseLangTutorLevel(target) || parseLangTutorLevel(raw) || "beginner";
+    const lang = normalizeLangName(target);
+    if (!lang) return null;
+    session.memory.lang_tutor_on = "true";
+    session.memory.lang_tutor_lang = lang;
+    session.memory.lang_tutor_level = level;
+    session.memory.lang_tutor_last = `بدء التعلّم (${level})`;
+    session.log.push({ type: "lang_tutor", action: "start", lang, level });
+    return {
+      type: "continue",
+      message: `ابدأ الآن درساً قصيراً لتعلّم ${lang} بمستوى ${level}. إن كان مبتدئاً ابدأ من الأصوات/الأساسيات ثم كلمات ثم جملة قصيرة، واختم بتمرين مصغّر واحد.`,
+      steps: [{ type: "plan", text: `بدء تعلّم ${lang}` }]
+    };
+  }
+
+  return null;
+}
 
 
 function sanitizeSessionId(raw) {
@@ -512,6 +754,10 @@ function commandsHelpText() {
 • أوامر — هذه القائمة
 • وضع المالك: … — تفعيل وضع المالك (كلمة السر من إعدادات الخادم فقط)
 • إلغاء وضع المالك — إيقاف وضع المالك لهذه الجلسة
+• تعلم اللغات / language learning — وضع معلّم اللغات
+• تعلم: <لغة> / تعلم إنجليزي / learn spanish — اختيار لغة (مستوى مبتدئ افتراضياً)
+• درس لغة — متابعة درس اللغة الحالي
+• إيقاف تعلّم اللغة / stop language learning — الخروج من وضع المعلّم
 
 نصيحة: لا تستخدم حدود كلمة لاتينية مع العربي؛ الأوامر تُطبَّع تلقائياً (أ/إ/آ → ا، ة → ه، بدون تشكيل).`;
 }
@@ -867,7 +1113,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -891,6 +1137,9 @@ async function runGrokDirect({ message, history, memory, searchContext }) {
 لا تكشف أسراراً ولا تطلب مفاتيح ولا تدّعِ دفع كود إلى GitHub.`;
   if (isOwnerModeActive(memory)) {
     system += "\n\n" + OWNER_MODE_ADDENDUM;
+  }
+  if (isLangTutorActive(memory)) {
+    system += "\n\n" + buildLangTutorAddendum(memory);
   }
   const userParts = [
     message,
@@ -1138,7 +1387,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «تعلم اللغات» / «تعلم: لغة» / «درس لغة»: وضع معلّم لغات صبور (دروس قصيرة + تمرين)؛ يُحفظ التقدّم في lang_tutor_*.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -1156,6 +1405,9 @@ function buildSystemInstructions(sessionOrMemory) {
   let s = instructions + "\nاستخدم سياق المحادثة السابقة إن وُجد، ولا تتجاهل تصحيحات المستخدم.";
   if (isOwnerModeActive(sessionOrMemory)) {
     s += "\n\n" + OWNER_MODE_ADDENDUM;
+  }
+  if (isLangTutorActive(sessionOrMemory)) {
+    s += "\n\n" + buildLangTutorAddendum(sessionOrMemory);
   }
   return s;
 }
@@ -1540,6 +1792,27 @@ app.post("/api/chat", async (req, res) => {
         provider: "groq",
         ownerMode: isOwnerModeActive(session)
       });
+    }
+
+    const langTutorCmd = handleLangTutorCommand(message, session);
+    if (langTutorCmd) {
+      if (langTutorCmd.type === "reply") {
+        return res.json({
+          text: langTutorCmd.text,
+          steps: langTutorCmd.steps,
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq",
+          languageTutor: true,
+          command: "language_tutor"
+        });
+      }
+      if (langTutorCmd.type === "continue" && langTutorCmd.message) {
+        message = String(langTutorCmd.message).slice(0, 4000);
+        // fall through to agent with tutor addendum active
+      }
     }
 
     if (isLessonsView(message)) {
@@ -1966,7 +2239,8 @@ app.get("/health", (_req, res) => {
     grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
-    release: "2.24.2-owner-mode",
+    languageTutor: true,
+    release: "2.25.0-language-tutor",
     livePrimary: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLive: "https://lunar-breeze-dawn-ember.grok.me",
     priorLiveVersion: "3.0",
