@@ -110,6 +110,44 @@ function friendlyError(raw) {
   return t || "حدث خطأ غير متوقع. حاول مرة أخرى.";
 }
 
+
+function addMsgActions(root, text) {
+  if (!root || root.classList.contains("user") || root.classList.contains("error")) return;
+  if (root.querySelector(".msg-actions")) return;
+  const wrap = document.createElement("div");
+  wrap.className = "msg-actions";
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "msg-action";
+  copyBtn.textContent = "نسخ";
+  copyBtn.onclick = async () => {
+    const value = text || root.querySelector(".body")?.innerText || "";
+    try {
+      await navigator.clipboard.writeText(value);
+      copyBtn.textContent = "تم";
+      setTimeout(() => { copyBtn.textContent = "نسخ"; }, 1200);
+    } catch {
+      copyBtn.textContent = "تعذر";
+      setTimeout(() => { copyBtn.textContent = "نسخ"; }, 1200);
+    }
+  };
+  wrap.appendChild(copyBtn);
+  if (navigator.share) {
+    const shareBtn = document.createElement("button");
+    shareBtn.type = "button";
+    shareBtn.className = "msg-action";
+    shareBtn.textContent = "مشاركة";
+    shareBtn.onclick = async () => {
+      const value = text || root.querySelector(".body")?.innerText || "";
+      try {
+        await navigator.share({ title: "Hessin AI", text: value });
+      } catch {}
+    };
+    wrap.appendChild(shareBtn);
+  }
+  root.appendChild(wrap);
+}
+
 function addMessage({ text, who, steps, files, error }) {
   const d = document.createElement("div");
   d.className = "msg " + who + (error ? " error" : "");
@@ -150,6 +188,7 @@ function addMessage({ text, who, steps, files, error }) {
     d.appendChild(wrap);
   }
 
+  if (who === "ai" && !error) addMsgActions(d, text);
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
   return { root: d, body };
@@ -310,6 +349,7 @@ async function sendChat(text, { approved } = {}) {
       }
       showPending(data.pending);
       setStatus("ready", "جاهز");
+      addMsgActions(thinking.root, data.text || thinking.body.innerText || "");
     }
   } catch (err) {
     if (err && err.name === "AbortError") {

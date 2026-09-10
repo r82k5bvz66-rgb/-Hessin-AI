@@ -26,7 +26,7 @@ function resolveModel() {
 }
 
 const MODEL = resolveModel();
-const VERSION = "2.9.3";
+const VERSION = "2.10.0";
 
 app.use(express.json({ limit: "2mb" }));
 app.use((_req, res, next) => {
@@ -696,7 +696,8 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq",
-        fastPath: true
+        fastPath: true,
+    pwa: true
       });
     }
 
