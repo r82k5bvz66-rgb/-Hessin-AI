@@ -1,13 +1,13 @@
 {
-  "version": 8,
-  "updated": "2026-09-10T14:15:00Z",
+  "version": 9,
+  "updated": "2026-09-11T04:20:00Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
     "live": "https://hazel-palm-cosmic-pepper.grok.me",
     "legacy": "https://hessin-ai.vercel.app",
-    "note": "مرتبطان: المدربة + Hessin AI v3.1 على grok.me (grok-4.5، بث SSE). الأساسية: hazel-palm. السابقة 3.0: lunar-breeze. Vercel تراث (2.25.0 + تنبيه).",
+    "note": "مرتبطان: المدربة + Hessin AI v3.1 على grok.me (grok-4.5، بث SSE). الأساسية: hazel-palm. السابقة 3.0: lunar-breeze. Vercel تراث (2.26.0 + لغة هِسْل).",
     "prior_live": "https://lunar-breeze-dawn-ember.grok.me"
   },
   "facts": {
@@ -28,14 +28,16 @@
     "version_live": "3.1",
     "model_live": "grok-4.5",
     "pair_status": "linked_2026-09-10",
-    "version_legacy": "2.25.0",
+    "version_legacy": "2.26.0",
     "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1 على hazel-palm-cosmic-pepper.grok.me (السابقة 3.0: lunar-breeze-dawn-ember.grok.me)",
     "site_prior": "https://lunar-breeze-dawn-ember.grok.me",
     "version_prior": "3.0",
     "owner_mode": "تقليل الرفض المفرط فقط؛ الحماية الصلبة تبقى؛ كلمة السر فقط عبر HESSIN_OWNER_MODE_PASSWORD في Vercel",
-    "language_tutor": "تعلم اللغات / تعلم: لغة / درس لغة / إيقاف تعلّم اللغة — معلّم صبور مع lang_tutor_*"
+    "language_tutor": "تعلم اللغات / تعلم: لغة / درس لغة / إيقاف تعلّم اللغة — معلّم صبور مع lang_tutor_*",
+    "hesl": "هِسْل (Hesl): لغة أصلية — هسل: / hesl: / شرح هسل؛ hesl.mjs صندوق رمل"
   },
   "lessons": [
+    "2026-09-11 · فريق: لغة هِسْل (Hesl) v2.26.0 — أوامر هسل:/hesl:/شرح هسل مع مفسّر صندوق رمل في hesl.mjs",
     "2026-09-10 · فريق: وضع معلّم اللغات v2.25.0 — أوامر تعلم اللغات / تعلم: لغة / درس لغة / إيقاف تعلّم اللغة مع حقن توجيه معلّم صبور",
     "2026-09-10 · فريق: وضع المالك = تقليل الرفض المفرط فقط مع بقاء الحماية الصلبة؛ كلمة السر فقط في HESSIN_OWNER_MODE_PASSWORD على Vercel",
     "2026-09-10 · فريق: نُشرت Hessin AI v3.1 الأساسية على hazel-palm-cosmic-pepper.grok.me؛ lunar-breeze-dawn-ember.grok.me أصبحت السابقة (3.0)؛ Vercel تراث 2.24.1",
