@@ -1,0 +1,6 @@
+## تعريف سريع
+command «عن هسل» {
+  emit «هِسْل (Hesl) = Hessin Expression Script Language»
+  emit «اكتب وحدات في hesl/ ثم ادفع GitHub — تُحمَّل عند الإقلاع»
+  emit «للتجربة الفورية اكتب: هسل: ثم كود emit»
+}
