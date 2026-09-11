@@ -1,0 +1,11 @@
+## تدفق ترحيب — اكتب: ترحيب هسل
+command «ترحيب هسل» {
+  emit «أهلاً بك في Hessin AI»
+  emit «يمكن تطوير أوامر جديدة بملفات .hesl في مجلد hesl/»
+  remember hesl_welcomed = yes
+}
+
+command «hesl welcome» {
+  emit «Welcome to Hessin AI via Hesl»
+  remember hesl_welcomed = yes
+}
