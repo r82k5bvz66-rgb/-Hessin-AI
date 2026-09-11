@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.2";
+const VERSION = "2.26.3";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -777,7 +777,22 @@ function commandsHelpText() {
 }
 
 function isHeslHelp(message) {
-  return cmdEquals(message, "شرح هسل", "شرح هِسْل", "hesl help", "help hesl", "هسل مساعده", "هسل مساعدة", "hesl?");
+  return cmdEquals(
+    message,
+    "شرح هسل",
+    "شرح هِسْل",
+    "hesl help",
+    "help hesl",
+    "هسل مساعده",
+    "هسل مساعدة",
+    "مساعدة هسل",
+    "مساعدة هِسْل",
+    "مساعده هسل",
+    "مساعده هِسْل",
+    "هسل؟",
+    "هِسْل؟",
+    "hesl?"
+  );
 }
 
 function isHeslModulesList(message) {
@@ -2372,7 +2387,7 @@ app.get("/health", (_req, res) => {
     selfLearn: true,
     selfEvolve: true,
     autoCodePush: false,
-    accessPasswordUi: true,
+    accessPasswordUi: Boolean(process.env.HESSIN_ACCESS_PASSWORD),
     grokConfigured: Boolean(grokKey),
     grokModel: grokKey ? GROK_MODEL : null,
     providers: ["groq", "grok", "pair"],
@@ -2389,7 +2404,7 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.1-hesl-modules",
+    release: "2.26.3-fix-all",
     livePrimary: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLive: "https://lunar-breeze-dawn-ember.grok.me",
     priorLiveVersion: "3.0",

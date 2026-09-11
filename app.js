@@ -180,7 +180,15 @@ async function postChat(extra, signal) {
     const data = await r.json().catch(() => ({}));
     return { r, data };
   }
-  let result = await once(false);
+  let result;
+  try {
+    result = await once(false);
+  } catch (err) {
+    if (signal && signal.aborted) throw err;
+    // إعادة محاولة واحدة لأخطاء الشبكة المؤقتة
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    result = await once(false);
+  }
   if (result.r.status === 401 || result.data.needPassword) {
     await refreshHealth();
     if (serverMeta.passwordRequired) {
@@ -323,6 +331,9 @@ function attachMedia(bodyEl, data) {
         card.appendChild(err);
       }
     };
+    try {
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch {}
     if (!card.querySelector(".media-actions")) {
       const actions = document.createElement("div");
       actions.className = "media-actions";
