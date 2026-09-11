@@ -1,67 +1,92 @@
 # هِسْل (Hesl) — Hessin Expression Script Language
 
-**Claim:** هِسْل لغة برمجة أصلية حصرية لـ Hessin AI — ليست غلافاً رقيقاً لبايثون أو جافاسكربت. صُممت بتركيب مميز (guillemets عربية، `iff`/`spin`/`emit`/`bind`، ومنطقيات `yes`/`no`) وتعمل داخل صندوق رمل آمن داخل التطبيق.
+**Claim:** هِسْل لغة برمجة أصلية حصرية لـ Hessin AI — ليست غلافاً رقيقاً لبايثون أو جافاسكربت.
 
-**English:** Hesl is an original mini-language exclusive to Hessin AI. Distinctive syntax, bilingual keywords, sandboxed interpreter (no filesystem, no network, no JS `eval`).
+**واقعية مهمة / Be realistic:** هِسْل **تكمّل** Hessin (أوامر مكتوبة، تدفقات رد، منطق بسيط، ذاكرة جلسة).  
+هي **لا** تعيد كتابة Express أو بيئة Vercel بلغة هِسْل بين ليلة وضحاها. وقت التشغيل يبقى Node؛ الوحدات `.hesl` تُترجَم/تُنفَّذ داخل صندوق رمل عند الحاجة.
 
-## Run in chat (typed only — no UI chips)
+## مساران
+
+### 1) REPL تفاعلي في الشات (بدون أزرار UI)
 
 ```
 هسل: emit «أهلاً»
-hesl: emit 1+2
+hesl: bind س = 2
 شغّل هسل:
-bind ن = 3
-spin ن { emit turn }
+spin 3 { emit turn }
 ```
 
-Help: `شرح هسل` or `hesl help`
+شرح: `شرح هسل` أو `hesl help`  
+قائمة الوحدات المحمّلة: `أوامر هسل المحملة` أو `hesl modules`
 
-## Grammar (small)
+### 2) تطوير Hessin بـ هِسْل (مجلد `hesl/`)
 
-| Construct | Syntax | Arabic alias |
-|-----------|--------|--------------|
-| Comment | `## ...` | — |
-| Print | `emit <expr>` | `قل` |
-| Bind | `bind <name> = <expr>` | `خذ` |
-| If | `iff <cond> { ... } else { ... }` | `لو` / `وإلا` |
-| Loop N times | `spin <n> { ... }` | `كرر` |
-| Strings | `«...»` or `"..."` | — |
-| Booleans | `yes` / `no` | `نعم` / `لا` |
-| Join | `a ~ b` | — |
-| Ops | `+ - * / = != < > <= >= !` | — |
-
-Inside `spin`, the built-ins `turn` and `دورة` hold the 1-based iteration index.
-
-## Safety
-
-- No file I/O, no network, no dynamic JS evaluation
-- Step limit, max spin count, max output length, max source size
-
-## Example
+1. اكتب ملفًا مثل `hesl/commands/my.hesl`
+2. عرّف أمرًا:
 
 ```
-## عدّاد بسيط
-bind ن = 3
-spin ن {
-  emit «دورة » ~ turn
-}
-iff turn = 3 {
-  emit «انتهى»
-} else {
-  emit «لم يكتمل»
+## أمر جديد — يظهر كأمر مكتوب في الشات
+command «ملخص هسل» {
+  emit «هذا أمر مطوَّر بـ هِسْل»
+  remember hesl_summary_seen = yes
 }
 ```
 
-Expected output:
+3. ادفع إلى GitHub `main`
+4. بعد نشر/إقلاع الخادم تُحمَّل كل `hesl/**/*.hesl` تلقائياً
+5. في الشات اكتب بالضبط: `ملخص هسل`
+
+مهارات:
 
 ```
-دورة 1
-دورة 2
-دورة 3
-انتهى
+skill «حالة هسل» {
+  emit «هِسْل جاهزة»
+}
 ```
 
-## Files
+## النحو (مختصر)
 
-- `hesl.mjs` — tokenizer + parser + interpreter
-- `server.mjs` — `هسل:` / `hesl:` / `شرح هسل` command routing + `/health` → `heslLang: true`
+| البناء | الصيغة | Alias |
+|--------|--------|-------|
+| تعليق | `## ...` | — |
+| طباعة | `emit <expr>` | `قل` |
+| ربط | `bind n = <expr>` | `خذ` |
+| ذاكرة جلسة | `remember key = <expr>` | `تذكر` |
+| شرط | `iff c { } else { }` | `لو` / `وإلا` |
+| تكرار | `spin N { }` | `كرر` |
+| أمر شات | `command «اسم» { }` | `أمر` |
+| مهارة | `skill name { }` | `مهارة` |
+| نصوص | `«...»` أو `"..."` | — |
+| منطقي | `yes` / `no` | `نعم` / `لا` |
+| ربط نص | `a ~ b` | — |
+
+داخل `spin`: `turn` و `دورة` = رقم الدورة (من 1).
+
+## الأمان
+
+- من الشات: لا ملفات، لا شبكة، لا `eval` لجافاسكربت
+- تحميل الوحدات: **فقط** من مجلد المستودع `hesl/` عند إقلاع الخادم
+- حدود خطوات / تكرار / طول مخرجات
+- `remember`: مفاتيح آمنة فقط (بدون password/token/…)
+
+## الملفات
+
+| ملف | دور |
+|-----|-----|
+| `hesl.mjs` | tokenizer + parser + interpreter + `runHeslHandler` |
+| `hesl-build.mjs` | `loadHeslModules` / مطابقة الأوامر |
+| `hesl/**/*.hesl` | وحدات التطوير |
+| `server.mjs` | `هسل:` + أوامر الوحدات قبل الدردشة العامة؛ `/health` → `heslLang` + `heslModules` |
+
+## مثال تطوير أمر جديد
+
+أنشئ `hesl/commands/ping.hesl`:
+
+```
+command «هسل بنج» {
+  emit «pong من هِسْل»
+  remember hesl_ping = yes
+}
+```
+
+ادفع → بعد النشر اكتب في https://hessin-ai.vercel.app : `هسل بنج`
