@@ -1,0 +1,5 @@
+## مثال تطوير — اكتب: هسل بنج
+command «هسل بنج» {
+  emit «pong من هِسْل»
+  remember hesl_ping = yes
+}
