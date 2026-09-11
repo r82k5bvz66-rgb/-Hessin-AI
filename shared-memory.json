@@ -1,13 +1,13 @@
 {
   "version": 10,
-  "updated": "2026-09-11T04:30:00Z",
+  "updated": "2026-09-11T06:05:00Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
     "live": "https://hazel-palm-cosmic-pepper.grok.me",
     "legacy": "https://hessin-ai.vercel.app",
-    "note": "مرتبطان: المدربة + Hessin AI v3.1 على grok.me. Vercel تراث (2.26.1 + هِسْل وحدات hesl/).",
+    "note": "مرتبطان: المدربة + Hessin AI v3.1 على grok.me. Vercel تراث (2.26.2 + هِسْل وحدات hesl/).",
     "prior_live": "https://lunar-breeze-dawn-ember.grok.me"
   },
   "facts": {
@@ -28,7 +28,7 @@
     "version_live": "3.1",
     "model_live": "grok-4.5",
     "pair_status": "linked_2026-09-10",
-    "version_legacy": "2.26.1",
+    "version_legacy": "2.26.2",
     "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1 على hazel-palm-cosmic-pepper.grok.me (السابقة 3.0: lunar-breeze-dawn-ember.grok.me)",
     "site_prior": "https://lunar-breeze-dawn-ember.grok.me",
     "version_prior": "3.0",
@@ -37,6 +37,7 @@
     "hesl": "هِسْل: REPL هسل: + وحدات hesl/**/*.hesl (command/skill/remember)؛ heslLang+heslModules"
   },
   "lessons": [
+    "2026-09-11 · فريق: v2.26.2 — إصلاح SW لا يمسح الكاش الحالي + defer لـ app.js + ملخص يومي عام بلا تركيز على قطاع محدد",
     "2026-09-11 · فريق: هِسْل v2.26.1 — تطوير Hessin بوحدات hesl/ (command/skill/remember) مع REPL هسل: وصندوق رمل",
     "2026-09-11 · فريق: إطلاق هِسْل REPL الأساسي v2.26.0 ثم توسيع الوحدات في 2.26.1",
     "2026-09-10 · فريق: وضع معلّم اللغات v2.25.0 — أوامر تعلم اللغات / تعلم: لغة / درس لغة / إيقاف تعلّم اللغة مع حقن توجيه معلّم صبور",
