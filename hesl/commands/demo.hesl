@@ -1,0 +1,6 @@
+## أمر تجريبي — اكتب في الشات: تجربة هسل
+command «تجربة هسل» {
+  emit «✓ هِسْل تعمل داخل Hessin AI»
+  emit «هذه وحدة من hesl/commands/demo.hesl»
+  remember hesl_demo_ran = yes
+}
