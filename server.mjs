@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.3";
+const VERSION = "2.26.4";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -2404,11 +2404,11 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.3-fix-all",
-    livePrimary: "https://hazel-palm-cosmic-pepper.grok.me",
-    priorLive: "https://lunar-breeze-dawn-ember.grok.me",
-    priorLiveVersion: "3.0",
-    liveVersion: "3.1",
+    release: "2.26.4-live-link",
+    livePrimary: "https://hessin-ai-v314-fix.grok.me",
+    priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
+    priorLiveVersion: "3.1.1",
+    liveVersion: "3.1.4",
     legacy: true
   });
 });
