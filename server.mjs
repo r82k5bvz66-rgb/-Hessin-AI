@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { runHesl, heslHelpText } from "./hesl.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,7 +55,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.25.0";
+const VERSION = "2.26.0";
 
 app.use(express.json({ limit: "256kb" }));
 app.use((_req, res, next) => {
@@ -758,9 +759,78 @@ function commandsHelpText() {
 • تعلم: <لغة> / تعلم إنجليزي / learn spanish — اختيار لغة (مستوى مبتدئ افتراضياً)
 • درس لغة — متابعة درس اللغة الحالي
 • إيقاف تعلّم اللغة / stop language learning — الخروج من وضع المعلّم
+• هسل: / hesl: / شغّل هسل: — تشغيل كود لغة هِسْل (Hesl)
+• شرح هسل / hesl help — دليل هِسْل المختصر
 
 نصيحة: لا تستخدم حدود كلمة لاتينية مع العربي؛ الأوامر تُطبَّع تلقائياً (أ/إ/آ → ا، ة → ه، بدون تشكيل).`;
 }
+
+function isHeslHelp(message) {
+  return cmdEquals(message, "شرح هسل", "شرح هِسْل", "hesl help", "help hesl", "هسل مساعده", "هسل مساعدة", "hesl?");
+}
+
+function isHeslRun(message) {
+  const raw = String(message || "").trim();
+  if (!raw) return false;
+  // Prefixes (typed only). Diacritics optional: شغّل / شغل
+  if (/^(?:هسل|هِسْل|hesl)\s*[:：\-]/iu.test(raw)) return true;
+  if (/^(?:شغّل|شغل)\s+(?:هسل|هِسْل|hesl)\s*[:：\-]?/iu.test(raw)) return true;
+  if (/^(?:run\s+hesl|execute\s+hesl)\s*[:：\-]?/iu.test(raw)) return true;
+  return false;
+}
+
+function extractHeslSource(message) {
+  let raw = String(message || "");
+  // Strip BOM / zero-width
+  raw = raw.replace(/^[\uFEFF\u200B-\u200D]+/, "");
+  const patterns = [
+    /^(?:هسل|هِسْل|hesl)\s*[:：\-]\s*/iu,
+    /^(?:شغّل|شغل)\s+(?:هسل|هِسْل|hesl)\s*[:：\-]?\s*/iu,
+    /^(?:run\s+hesl|execute\s+hesl)\s*[:：\-]?\s*/iu
+  ];
+  for (const re of patterns) {
+    if (re.test(raw)) {
+      return raw.replace(re, "").trim();
+    }
+  }
+  return "";
+}
+
+function handleHeslCommand(message) {
+  if (isHeslHelp(message)) {
+    return {
+      text: heslHelpText(),
+      steps: [{ type: "plan", text: "شرح لغة هِسْل" }],
+      command: "hesl_help"
+    };
+  }
+  if (!isHeslRun(message)) return null;
+  const source = extractHeslSource(message);
+  if (!source) {
+    return {
+      text: "بعد «هسل:» ضع كود هِسْل.\nمثال:\nهسل:\nemit «أهلاً»\nemit 1+2\n\nللشرح: شرح هسل",
+      steps: [{ type: "plan", text: "توضيح أمر هِسْل" }],
+      command: "hesl"
+    };
+  }
+  const result = runHesl(source);
+  if (result.ok) {
+    const out = result.output || "(لا مخرجات)";
+    return {
+      text: "نتيجة هِسْل:\n" + out,
+      steps: [{ type: "plan", text: "تشغيل هِسْل (" + result.steps + " خطوة)" }],
+      command: "hesl",
+      hesl: { ok: true, steps: result.steps }
+    };
+  }
+  return {
+    text: "خطأ هِسْل:\n" + (result.error || "فشل غير معروف"),
+    steps: [{ type: "plan", text: "خطأ في كود هِسْل" }],
+    command: "hesl",
+    hesl: { ok: false, error: result.error }
+  };
+}
+
 
 function isAiDigest(message) {
   return cmdIncludes(message, "ai اليوم", "ذكاء اصطناعي اليوم", "تقنيات ai", "جديد الذكاء");
@@ -1113,7 +1183,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1815,6 +1885,22 @@ app.post("/api/chat", async (req, res) => {
       }
     }
 
+    const heslCmd = handleHeslCommand(message);
+    if (heslCmd) {
+      return res.json({
+        text: heslCmd.text,
+        steps: heslCmd.steps,
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "hesl",
+        command: heslCmd.command || "hesl",
+        hesl: heslCmd.hesl || true,
+        heslLang: true
+      });
+    }
+
     if (isLessonsView(message)) {
       return res.json({
         text: "دروس التعلّم الذاتي المحفوظة:\n" + formatLessons(session.memory),
@@ -2240,7 +2326,8 @@ app.get("/health", (_req, res) => {
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
     languageTutor: true,
-    release: "2.25.0-language-tutor",
+    heslLang: true,
+    release: "2.26.0-hesl",
     livePrimary: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLive: "https://lunar-breeze-dawn-ember.grok.me",
     priorLiveVersion: "3.0",
