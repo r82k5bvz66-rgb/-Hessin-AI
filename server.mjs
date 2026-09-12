@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.5";
+const VERSION = "2.26.6";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -758,6 +758,7 @@ function commandsHelpText() {
 • تجارة اليوم / تقرير أسعار
 • AI اليوم / أخبار X / تعلم من X
 • خوارزميات جوجل / خوارزميات التوليد / خوارزميات الانتشار
+• نية العميل / أسئلة شائعة — تحليل نية + مسودة FAQ
 • تعلم لوحدك / دروسي / تطوري / أفكار الكود
 • ذاكرة الفريق
 • استخدم grok / استخدم groq / اقتران
@@ -1216,11 +1217,78 @@ function isCodeIdeasView(message) {
   return cmdEquals(message, "افكار الكود", "اقتراحات الكود", "افكار تحسين", "code ideas");
 }
 
+function isCustomerIntent(message) {
+  return cmdIncludes(
+    message,
+    "نيه العميل",
+    "نية العميل",
+    "تحليل نيه العميل",
+    "تحليل نية العميل",
+    "اسئله شائعه",
+    "أسئلة شائعة",
+    "محتوى الاسئله الشائعه",
+    "محتوى الأسئلة الشائعة",
+    "customer intent",
+    "faq content"
+  ) || cmdEquals(
+    message,
+    "نيه العميل",
+    "نية العميل",
+    "اسئله شائعه",
+    "أسئلة شائعة",
+    "customer intent",
+    "faq"
+  );
+}
+
+async function runCustomerIntent(message, history) {
+  const historyMsgs = normalizeHistory(history).slice(-6);
+  const bare = cmdEquals(
+    message,
+    "نيه العميل",
+    "نية العميل",
+    "تحليل نيه العميل",
+    "تحليل نية العميل",
+    "اسئله شائعه",
+    "أسئلة شائعة",
+    "محتوى الاسئله الشائعه",
+    "محتوى الأسئلة الشائعة",
+    "customer intent",
+    "faq content",
+    "faq"
+  );
+  const system = `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: تحليل نية العميل + مسودة أسئلة شائعة (FAQ) لصاحب مشروع/عرض عام.
+القواعد:
+1) إن كان الطلب أمراً فارغاً بلا وصف منتج/عرض، اسأل سؤالاً واحداً قصيراً يطلب وصفاً عاماً للمنتج أو الخدمة أو العرض.
+2) إن وُجد وصف: استنتج 3–5 نيات محتملة للعميل (ماذا يريد، مخاوفه، قرار الشراء).
+3) اكتب 5–8 أسئلة شائعة بصيغة سؤال/جواب قصيرة عملية.
+4) ابقَ عاماً وحيادياً؛ لا تخصّص لقطاع معيّن (ولا فرامل/ورش) إلا إذا ذكر المستخدم ذلك صراحة.
+5) اختم بـ «خطوة اليوم:» جملة واحدة قابلة للتنفيذ (مثل تحسين صفحة الأسئلة أو رد موحّد).
+6) بلا حشو وبلا رموز اقتباس داخلية من أدوات البحث.`;
+  const userContent = bare
+    ? "الأمر فقط بدون تفاصيل إضافية. اطلب وصفاً قصيراً للمنتج/العرض أولاً."
+    : String(message || "").trim();
+  const completion = await client.chat.completions.create({
+    model: resolveModel(),
+    messages: [
+      { role: "system", content: system },
+      ...historyMsgs,
+      { role: "user", content: userContent }
+    ],
+    temperature: 0.5,
+    max_completion_tokens: 1400
+  });
+  const text = String(completion.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("تعذر توليد تحليل نية العميل.");
+  return text.replace(/【[^】]*】/g, "").trim();
+}
+
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1494,7 +1562,8 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «تعلم اللغات» / «تعلم: لغة» / «درس لغة»: وضع معلّم لغات صبور (دروس قصيرة + تمرين)؛ يُحفظ التقدّم في lang_tutor_*.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «تعلم اللغات» / «تعلم: لغة» / «درس لغة»: وضع معلّم لغات صبور (دروس قصيرة + تمرين)؛ يُحفظ التقدّم في lang_tutor_*.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «نية العميل» / «أسئلة شائعة»: تحليل نيات محتملة للعميل + مسودة FAQ عامة (بدون تخصيص قطاع إلا بطلب صريح).
+- «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -2007,14 +2076,7 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq",
-        sharedMemory: true,
-    generalFreshReplies: true,
-    genAlgoExplain: true,
-    diffusionExplain: true,
-    imageGen: true,
-    grokImage: Boolean(grokKey),
-    grokImageModel: grokKey ? resolveGrokImageModel() : null,
-    videoEmbed: true
+        sharedMemory: true
       });
     }
 
@@ -2189,6 +2251,40 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
+    if (isCustomerIntent(message)) {
+      const historyIntent = normalizeHistory(req.body?.history);
+      try {
+        const text = await runCustomerIntent(message, historyIntent);
+        session.memory.customer_intent_last = String(text).replace(/\s+/g, " ").trim().slice(0, 280);
+        session.memory.customer_intent_last_date = new Date().toISOString().slice(0, 10);
+        session.log.push({ type: "memory", key: "customer_intent_last" });
+        return res.json({
+          text,
+          steps: [
+            { type: "plan", text: "تحليل نية العميل / أسئلة شائعة" },
+            { type: "memory", text: "حفظ ملخص نية العميل" }
+          ],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq",
+          command: "customer_intent"
+        });
+      } catch (err) {
+        return res.json({
+          text: "تعذر تحليل نية العميل الآن. أعد المحاولة بعد قليل أو أضف وصفاً قصيراً للمنتج/العرض.",
+          steps: [{ type: "plan", text: "فشل تحليل نية العميل" }],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq",
+          command: "customer_intent"
+        });
+      }
+    }
+
     const historyEarly = normalizeHistory(req.body?.history);
     if (isSimpleChat(message)) {
       const text = await runSimpleReply(message, historyEarly);
@@ -2200,8 +2296,7 @@ app.post("/api/chat", async (req, res) => {
         pending: session.pending,
         version: VERSION,
         provider: "groq",
-        fastPath: true,
-    pwa: true
+        fastPath: true
       });
     }
 
@@ -2397,11 +2492,11 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.5-image-display",
+    release: "2.26.6-customer-intent",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
-    liveVersion: "3.1.4",
+    liveVersion: "3.1.5",
     legacy: true
   });
 });

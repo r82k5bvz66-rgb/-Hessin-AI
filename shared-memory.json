@@ -1,13 +1,13 @@
 {
   "version": 10,
-  "updated": "2026-09-11T19:50:00Z",
+  "updated": "2026-09-12T06:15:00Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
     "live": "https://hessin-ai-v314-fix.grok.me",
     "legacy": "https://hessin-ai.vercel.app",
-    "note": "مرتبطان: المدربة + Hessin AI v3.1.4 على hessin-ai-v314-fix.grok.me (صور تعمل). hazel-palm بقيت 3.1.1 بسبب Name already in use. Vercel تراث 2.26.4.",
+    "note": "مرتبطان: المدربة + Hessin AI v3.1.5 على hessin-ai-v314-fix.grok.me (صور SSE). hazel-palm بقيت 3.1.1 بسبب Name already in use. Vercel تراث 2.26.6.",
     "prior_live": "https://hazel-palm-cosmic-pepper.grok.me"
   },
   "facts": {
@@ -25,18 +25,20 @@
     "image_gen_command": "صورة: وصف... (توليد تجريبي)",
     "example_style": "أمثلة عامة ومحايدة؛ لا تستخدم أمثلة فرامل/ورش إلا إذا طلب المستخدم ذلك",
     "site_legacy": "https://hessin-ai.vercel.app",
-    "version_live": "3.1.4",
+    "version_live": "3.1.5",
     "model_live": "grok-4.5",
     "pair_status": "linked_2026-09-10",
-    "version_legacy": "2.26.4",
-    "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1.4 على hessin-ai-v314-fix.grok.me",
+    "version_legacy": "2.26.6",
+    "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1.5 على hessin-ai-v314-fix.grok.me",
     "site_prior": "https://hazel-palm-cosmic-pepper.grok.me",
     "version_prior": "3.1.1",
     "owner_mode": "تقليل الرفض المفرط فقط؛ الحماية الصلبة تبقى؛ كلمة السر فقط عبر HESSIN_OWNER_MODE_PASSWORD في Vercel",
     "language_tutor": "تعلم اللغات / تعلم: لغة / درس لغة / إيقاف تعلّم اللغة — معلّم صبور مع lang_tutor_*",
-    "hesl": "هِسْل: REPL هسل: + وحدات hesl/**/*.hesl (command/skill/remember)؛ heslLang+heslModules"
+    "hesl": "هِسْل: REPL هسل: + وحدات hesl/**/*.hesl (command/skill/remember)؛ heslLang+heslModules",
+    "customer_intent": "نية العميل / أسئلة شائعة — تحليل نيات + مسودة FAQ عامة"
   },
   "lessons": [
+    "2026-09-12 · فريق: v2.26.6 — أمر نية العميل/أسئلة شائعة + إصلاح تسرّب أعلام الحالة من رد ذاكرة الفريق",
     "2026-09-11 · فريق: نشر grok 3.1.4 على https://hessin-ai-v314-fix.grok.me بعد فشل تحديث hazel-palm (Name already in use)؛ الصور ظاهرة",
     "2026-09-11 · فريق: v2.26.3 — فتح الموقع بلا بوابة دخول، مساعدة هسل، إعادة محاولة الشبكة، تمرير للصورة",
     "2026-09-11 · فريق: v2.26.2 — إصلاح SW لا يمسح الكاش الحالي + defer لـ app.js + ملخص يومي عام بلا تركيز على قطاع محدد",
