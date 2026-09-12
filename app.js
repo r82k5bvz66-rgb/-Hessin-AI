@@ -301,6 +301,24 @@ function renderMarkdown(text) {
   return s;
 }
 
+function toDisplayImageUrl(url) {
+  const src = String(url || "");
+  if (!src.startsWith("data:image/")) return src;
+  try {
+    const comma = src.indexOf(",");
+    if (comma < 0) return src;
+    const header = src.slice(0, comma);
+    const b64 = src.slice(comma + 1);
+    const mime = (header.match(/^data:([^;]+)/) || [, "image/jpeg"])[1];
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: mime }));
+  } catch {
+    return src;
+  }
+}
+
 function attachMedia(bodyEl, data) {
   if (!bodyEl || !data) return;
   if (data.imageUrl) {
@@ -315,14 +333,26 @@ function attachMedia(bodyEl, data) {
       img = document.createElement("img");
       img.className = "gen-image";
       img.alt = "صورة مولّدة";
+      img.style.display = "block";
+      img.style.maxWidth = "100%";
       card.insertBefore(img, card.firstChild);
     }
     img.loading = "eager";
     img.decoding = "async";
     img.referrerPolicy = "no-referrer";
-    img.src = data.imageUrl;
-    img.onload = () => { card.classList.remove("media-error"); };
+    const displayUrl = toDisplayImageUrl(data.imageUrl);
+    img.src = displayUrl;
+    img.onload = () => {
+      card.classList.remove("media-error");
+      try { img.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
+    };
     img.onerror = () => {
+      // fallback: try original URL if blob conversion failed
+      if (displayUrl !== data.imageUrl && img.dataset.retried !== "1") {
+        img.dataset.retried = "1";
+        img.src = data.imageUrl;
+        return;
+      }
       card.classList.add("media-error");
       if (!card.querySelector(".media-fallback")) {
         const err = document.createElement("div");
@@ -342,7 +372,7 @@ function attachMedia(bodyEl, data) {
       open.textContent = "فتح";
       open.target = "_blank";
       open.rel = "noopener noreferrer";
-      open.href = data.imageUrl;
+      open.href = data.imageUrl.startsWith("data:") ? displayUrl : data.imageUrl;
       actions.appendChild(open);
       card.appendChild(actions);
     }

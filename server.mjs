@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.4";
+const VERSION = "2.26.5";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -1040,21 +1040,14 @@ async function generateImageLikeGrok(prompt) {
     }
   }
 
-  // 2) Pollinations -> embed as data URL so the chat ALWAYS can render inline
-  const upstream = buildUpstreamImageUrl(cleanPrompt, 768, 768);
-  try {
-    const dataUrl = await fetchImageAsDataUrl(upstream);
-    return { ok: true, imageUrl: dataUrl, provider: "pollinations", model: "pollinations-fallback" };
-  } catch (err) {
-    console.error("pollinations embed failed", err);
-    // last resort: same-origin proxy URL
-    return {
-      ok: true,
-      imageUrl: buildImageUrl(cleanPrompt).replace("w=1024&h=1024", "w=768&h=768"),
-      provider: "pollinations-proxy",
-      model: "pollinations-fallback"
-    };
-  }
+  // 2) Pollinations via same-origin /api/image — short URL so <img> always renders
+  // (huge data: URLs often make chat say "ready" while the bubble fails to show the picture)
+  return {
+    ok: true,
+    imageUrl: buildImageUrl(cleanPrompt),
+    provider: "pollinations-proxy",
+    model: "pollinations-fallback"
+  };
 }
 
 function isVideoCommand(message) {
@@ -2404,7 +2397,7 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.4-live-link",
+    release: "2.26.5-image-display",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
