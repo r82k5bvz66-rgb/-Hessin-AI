@@ -11,7 +11,12 @@
           "style.css",
           "shared-memory.json",
           "manifest.webmanifest",
-          "sw.js"
+          "sw.js",
+          "icon-192.png",
+          "icon-512.png",
+          "hesl.mjs",
+          "hesl-build.mjs",
+          "hesl/**"
         ]
       }
     }

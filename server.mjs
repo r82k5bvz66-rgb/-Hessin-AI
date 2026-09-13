@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.6";
+const VERSION = "2.26.7";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -985,7 +985,7 @@ function resolveGrokImageModel() {
 
 async function fetchImageAsDataUrl(url) {
   const r = await fetch(url, {
-    headers: { "User-Agent": "HessinAI/2.24.1", Accept: "image/*,*/*" },
+    headers: { "User-Agent": "HessinAI/2.26.7", Accept: "image/*,*/*" },
     redirect: "follow"
   });
   if (!r.ok) throw new Error("image_fetch_" + r.status);
@@ -1898,7 +1898,7 @@ app.get("/api/image", async (req, res) => {
     if (!prompt) return res.status(400).json({ error: "prompt required" });
     const upstream = buildUpstreamImageUrl(prompt, req.query?.w || 768, req.query?.h || 768);
     const r = await fetch(upstream, {
-      headers: { "User-Agent": "HessinAI/2.20.1", Accept: "image/*,*/*" },
+      headers: { "User-Agent": "HessinAI/2.26.7", Accept: "image/*,*/*" },
       redirect: "follow"
     });
     if (!r.ok) {
@@ -2492,7 +2492,7 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.6-customer-intent",
+    release: "2.26.7-pwa-icons",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",

@@ -1,13 +1,13 @@
 {
-  "version": 10,
-  "updated": "2026-09-12T06:15:00Z",
+  "version": 11,
+  "updated": "2026-09-13T06:03:35Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
     "live": "https://hessin-ai-v314-fix.grok.me",
     "legacy": "https://hessin-ai.vercel.app",
-    "note": "مرتبطان: المدربة + Hessin AI v3.1.5 على hessin-ai-v314-fix.grok.me (صور SSE). hazel-palm بقيت 3.1.1 بسبب Name already in use. Vercel تراث 2.26.6.",
+    "note": "مرتبطان: المدربة + Hessin AI v3.1.5 على hessin-ai-v314-fix.grok.me (صور SSE). hazel-palm بقيت 3.1.1 بسبب Name already in use. Vercel تراث 2.26.7 (أيقونات PWA في النشر).",
     "prior_live": "https://hazel-palm-cosmic-pepper.grok.me"
   },
   "facts": {
@@ -28,7 +28,7 @@
     "version_live": "3.1.5",
     "model_live": "grok-4.5",
     "pair_status": "linked_2026-09-10",
-    "version_legacy": "2.26.6",
+    "version_legacy": "2.26.7",
     "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1.5 على hessin-ai-v314-fix.grok.me",
     "site_prior": "https://hazel-palm-cosmic-pepper.grok.me",
     "version_prior": "3.1.1",
@@ -38,6 +38,7 @@
     "customer_intent": "نية العميل / أسئلة شائعة — تحليل نيات + مسودة FAQ عامة"
   },
   "lessons": [
+    "2026-09-13 · فريق: v2.26.7 — إصلاح أيقونات PWA على Vercel (includeFiles لـ icon-192/512 + ملفات هِسْل)",
     "2026-09-12 · فريق: v2.26.6 — أمر نية العميل/أسئلة شائعة + إصلاح تسرّب أعلام الحالة من رد ذاكرة الفريق",
     "2026-09-11 · فريق: نشر grok 3.1.4 على https://hessin-ai-v314-fix.grok.me بعد فشل تحديث hazel-palm (Name already in use)؛ الصور ظاهرة",
     "2026-09-11 · فريق: v2.26.3 — فتح الموقع بلا بوابة دخول، مساعدة هسل، إعادة محاولة الشبكة، تمرير للصورة",
