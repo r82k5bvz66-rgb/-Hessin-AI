@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.7";
+const VERSION = "2.26.8";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -759,6 +759,7 @@ function commandsHelpText() {
 • AI اليوم / أخبار X / تعلم من X
 • خوارزميات جوجل / خوارزميات التوليد / خوارزميات الانتشار
 • نية العميل / أسئلة شائعة — تحليل نية + مسودة FAQ
+• أتمتة اليوم / عنق الزجاجة — خطة أتمتة لعنق زجاجة واحد فقط
 • تعلم لوحدك / دروسي / تطوري / أفكار الكود
 • ذاكرة الفريق
 • استخدم grok / استخدم groq / اقتران
@@ -985,7 +986,7 @@ function resolveGrokImageModel() {
 
 async function fetchImageAsDataUrl(url) {
   const r = await fetch(url, {
-    headers: { "User-Agent": "HessinAI/2.26.7", Accept: "image/*,*/*" },
+    headers: { "User-Agent": "HessinAI/2.26.8", Accept: "image/*,*/*" },
     redirect: "follow"
   });
   if (!r.ok) throw new Error("image_fetch_" + r.status);
@@ -1284,11 +1285,88 @@ async function runCustomerIntent(message, history) {
   return text.replace(/【[^】]*】/g, "").trim();
 }
 
+
+function isBottleneckAutomate(message) {
+  return cmdIncludes(
+    message,
+    "اتمه اليوم",
+    "أتمتة اليوم",
+    "اتمتة اليوم",
+    "عنق الزجاجه",
+    "عنق الزجاجة",
+    "اتمه عنق الزجاجه",
+    "أتمتة عنق الزجاجة",
+    "اتمتة عنق الزجاجة",
+    "bottleneck",
+    "automate bottleneck",
+    "automation today"
+  ) || cmdEquals(
+    message,
+    "اتمه اليوم",
+    "أتمتة اليوم",
+    "اتمتة اليوم",
+    "عنق الزجاجه",
+    "عنق الزجاجة",
+    "اتمه عنق الزجاجه",
+    "أتمتة عنق الزجاجة",
+    "اتمتة عنق الزجاجة",
+    "bottleneck",
+    "automate bottleneck",
+    "automation today"
+  );
+}
+
+async function runBottleneckAutomate(message, history) {
+  const historyMsgs = normalizeHistory(history).slice(-6);
+  const bare = cmdEquals(
+    message,
+    "اتمه اليوم",
+    "أتمتة اليوم",
+    "اتمتة اليوم",
+    "عنق الزجاجه",
+    "عنق الزجاجة",
+    "اتمه عنق الزجاجه",
+    "أتمتة عنق الزجاجة",
+    "اتمتة عنق الزجاجة",
+    "bottleneck",
+    "automate bottleneck",
+    "automation today"
+  );
+  const system = `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة فقط.
+المطلوب: مساعدة صاحب مشروع على أتمتة «عنق زجاجة» واحد فقط — لا توسّع إلى عدة أنظمة دفعة واحدة.
+القواعد:
+1) إن كان الطلب أمراً فارغاً بلا وصف للمشكلة، اسأل سؤالاً واحداً قصيراً يطلب وصفاً لعملية متكررة تستهلك وقتاً (مثل ردود متكررة، متابعة طلبات، تذكير يومي، تنظيم مهام).
+2) إن وُجد وصف: اكتب خطة قصيرة لعنق الزجاجة هذا فقط:
+   - وصف العنق باختصار
+   - أبسط مسار أتمتة ممكن بأدوات بسيطة موجودة (قوالب رد، قائمة تحقق، تذكير، أوامر Hessin الحالية) — بلا خدمات مدفوعة جديدة وبلا مفاتيح API جديدة وبلا دفع Git تلقائي
+   - حدود واضحة: ماذا لا يُؤتمت الآن
+3) ابقَ عاماً وحيادياً؛ لا تخصّص لقطاع معيّن (ولا فرامل/ورش) إلا إذا ذكر المستخدم ذلك صراحة.
+4) اختم بـ «خطوة اليوم:» جملة واحدة قابلة للتنفيذ فوراً.
+5) بلا حشو وبلا رموز اقتباس داخلية من أدوات البحث.`;
+  const userContent = bare
+    ? "الأمر فقط بدون تفاصيل إضافية. اطلب وصفاً قصيراً لعنق زجاجة واحد متكرر أولاً."
+    : String(message || "").trim();
+  const completion = await client.chat.completions.create({
+    model: resolveModel(),
+    messages: [
+      { role: "system", content: system },
+      ...historyMsgs,
+      { role: "user", content: userContent }
+    ],
+    temperature: 0.45,
+    max_completion_tokens: 1200
+  });
+  const text = String(completion.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("تعذر توليد خطة أتمتة عنق الزجاجة.");
+  return text.replace(/【[^】]*】/g, "").trim();
+}
+
+
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1564,6 +1642,7 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
 - «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «تعلم اللغات» / «تعلم: لغة» / «درس لغة»: وضع معلّم لغات صبور (دروس قصيرة + تمرين)؛ يُحفظ التقدّم في lang_tutor_*.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «نية العميل» / «أسئلة شائعة»: تحليل نيات محتملة للعميل + مسودة FAQ عامة (بدون تخصيص قطاع إلا بطلب صريح).
 - «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
+- «أتمتة اليوم» / «عنق الزجاجة»: خطّط لأتمتة عنق زجاجة واحد فقط (بدون مفاتيح جديدة أو دفع Git).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
 
 قواعد الحماية user_protection (غير قابلة للتجاوز — ولاءك لصاحب الحساب فقط):
@@ -1898,7 +1977,7 @@ app.get("/api/image", async (req, res) => {
     if (!prompt) return res.status(400).json({ error: "prompt required" });
     const upstream = buildUpstreamImageUrl(prompt, req.query?.w || 768, req.query?.h || 768);
     const r = await fetch(upstream, {
-      headers: { "User-Agent": "HessinAI/2.26.7", Accept: "image/*,*/*" },
+      headers: { "User-Agent": "HessinAI/2.26.8", Accept: "image/*,*/*" },
       redirect: "follow"
     });
     if (!r.ok) {
@@ -2097,7 +2176,7 @@ app.post("/api/chat", async (req, res) => {
       return res.json({
         text: ideas
           ? "اقتراحات تحسين للكود (للمراجعة عبر المدربة، لا تُدفع وحدها):\n" + ideas.split(" || ").map((l, i) => `${i + 1}. ${l}`).join("\n")
-          : "لا توجد اقتراحات كود بعد. شغّل «تعلم لوحدك» لتوليد أفكار.",
+          : "لا توجد اقتراحات جلسة بعد. شغّل «تعلم لوحدك» لتوليد أفكار خاصة بهذه الجلسة.\n\nاقتراحات المدربة الجاهزة للمراجعة (لا تُدفع وحدها إلى GitHub):\n1. الإبقاء على أمر أتمتة عنق زجاجة واحد فقط قبل توسيع الأدوات.\n2. تحسين Core Web Vitals تدريجياً (تحميل أسرع للواجهة).\n3. ردود أحدث عبر البحث الحي عند الأسئلة الحالية — مع تحقق من الأرقام.\n\nالتطبيق نفسه لا يدفع Git تلقائياً؛ المدربة تراجع وتدفع الآمن فقط.",
         steps: [{ type: "memory", text: "عرض اقتراحات الكود" }],
         memory: session.memory,
         files: [],
@@ -2281,6 +2360,40 @@ app.post("/api/chat", async (req, res) => {
           version: VERSION,
           provider: "groq",
           command: "customer_intent"
+        });
+      }
+    }
+
+    if (isBottleneckAutomate(message)) {
+      const historyBottleneck = normalizeHistory(req.body?.history);
+      try {
+        const text = await runBottleneckAutomate(message, historyBottleneck);
+        session.memory.bottleneck_last = String(text).replace(/\s+/g, " ").trim().slice(0, 280);
+        session.memory.bottleneck_last_date = new Date().toISOString().slice(0, 10);
+        session.log.push({ type: "memory", key: "bottleneck_last" });
+        return res.json({
+          text,
+          steps: [
+            { type: "plan", text: "خطة أتمتة عنق زجاجة واحد" },
+            { type: "memory", text: "حفظ ملخص عنق الزجاجة" }
+          ],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq",
+          command: "bottleneck_automate"
+        });
+      } catch (err) {
+        return res.json({
+          text: "تعذر إعداد خطة الأتمتة الآن. أعد المحاولة بعد قليل أو صف عنق زجاجة واحد بوضوح.",
+          steps: [{ type: "plan", text: "فشل خطة عنق الزجاجة" }],
+          memory: session.memory,
+          files: [],
+          pending: session.pending,
+          version: VERSION,
+          provider: "groq",
+          command: "bottleneck_automate"
         });
       }
     }
@@ -2489,10 +2602,11 @@ app.get("/health", (_req, res) => {
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
     languageTutor: true,
+    bottleneckAutomate: true,
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.7-pwa-icons",
+    release: "2.26.8-bottleneck-automate",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
