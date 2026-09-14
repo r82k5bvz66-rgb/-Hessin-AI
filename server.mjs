@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.27.2";
+const VERSION = "2.27.3";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -1448,7 +1448,9 @@ function extractSources(text) {
   let m;
   while ((m = re.exec(raw))) {
     let u = m[0].replace(/[.,;:!?]+$/, "");
-    if (/pollinations|localhost|127\.0\.0\.1|vercel\.app\/api/i.test(u)) continue;
+    if (!/^https?:\/\//i.test(u)) continue;
+    if (/pollinations|localhost|127\.0\.0\.1|0\.0\.0\.0|vercel\.app\/api|example\.com|javascript:/i.test(u)) continue;
+    if (/\.(png|jpe?g|gif|webp|svg|css|js)(\?|$)/i.test(u)) continue;
     if (!urls.includes(u)) urls.push(u);
     if (urls.length >= 8) break;
   }
@@ -2071,7 +2073,7 @@ async function fetchPageExcerpt(url, maxChars = 3500) {
 async function readTopSources(urls, steps, limit = 3) {
   const picked = (urls || []).slice(0, limit);
   if (!picked.length) return [];
-  steps.push({ type: "tool", text: `قراءة ${picked.length} مصادر` });
+  steps.push({ type: "tool", text: `Web Search · Open pages (${picked.length})` });
   const results = await Promise.all(picked.map((u) => fetchPageExcerpt(u)));
   const ok = results.filter((r) => r.ok && r.text);
   steps.push({
@@ -2121,7 +2123,7 @@ async function runSearchWithFallback(message, steps) {
 
   // 2) Web Search API
   try {
-    steps.push({ type: "tool", text: "Web Search API" });
+    steps.push({ type: "tool", text: "Web Search · Search" });
     searchText = await runBrowserSearch(message);
     mode = "browser_search";
   } catch (err1) {
@@ -2156,7 +2158,7 @@ async function runSearchWithFallback(message, steps) {
   }
 
   // 3) جمع عدة مصادر
-  steps.push({ type: "plan", text: "جمع مصادر من نتائج البحث" });
+  steps.push({ type: "plan", text: "Web Search · Sources (جمع روابط)" });
   let sources = extractSources(searchText);
   if (sources.length) {
     steps.push({ type: "plan", text: `مصادر مجمّعة: ${sources.length}` });
@@ -2168,7 +2170,7 @@ async function runSearchWithFallback(message, steps) {
   const pages = await readTopSources(sources, steps, 3);
 
   // 5) AI يحلل ويقارن → 6) إجابة + روابط
-  steps.push({ type: "plan", text: "تحليل ومقارنة المصادر" });
+  steps.push({ type: "plan", text: "Web Search · Extract information" });
   try {
     let finalText = await synthesizeFromSources(message, searchText, pages, sources);
     sources = extractSources(`${finalText}\n${sources.join("\n")}`);
@@ -2176,7 +2178,7 @@ async function runSearchWithFallback(message, steps) {
     const seen = new Set();
     sources = sources.filter((u) => (seen.has(u) ? false : (seen.add(u), true))).slice(0, 8);
     finalText = appendSourcesSection(finalText, sources);
-    steps.push({ type: "plan", text: "إجابة مع روابط المصادر" });
+    steps.push({ type: "plan", text: "Web Search · Sources (في الرد)" });
     return {
       text: finalText,
       mode,
@@ -3089,10 +3091,12 @@ app.get("/health", (_req, res) => {
     fileAnalyze: true,
     sourcesCited: true,
     researchPipeline: true,
+    selfImprover: true,
+    selfImproverAutoMerge: false,
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.27.2-research-direct",
+    release: "2.27.3-search-steps",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
