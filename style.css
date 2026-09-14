@@ -511,10 +511,6 @@ button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
 .media-error .gen-image { display: none; }
 
 
-.composer .attach {
-  flex: 0 0 auto;
-  min-width: 52px;
-}
 .sources {
   margin-top: 10px;
   padding: 10px 12px;
@@ -525,3 +521,63 @@ button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .sources strong { display: block; margin-bottom: 6px; }
 .sources a { color: #9ecbff; word-break: break-all; }
+
+
+.attach-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+.attach-preview.hidden { display: none; }
+.attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(109,93,252,0.14);
+  border: 1px solid rgba(109,93,252,0.28);
+  font-size: 13px;
+}
+.attach-chip img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.attach-chip button {
+  border: 0;
+  background: transparent;
+  color: #ffb4ae;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.composer { flex-wrap: wrap; }
+.composer-tools {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px 0;
+  order: -1;
+}
+.tool-btn {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  color: #d7e0ff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 34px;
+}
+.tool-btn:hover { border-color: rgba(109,93,252,0.45); }
+@media (max-width: 600px) {
+  .tool-btn { padding: 6px 10px; font-size: 12px; }
+}

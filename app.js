@@ -2,8 +2,13 @@ const form = document.getElementById("form");
 const input = document.getElementById("input");
 const chat = document.getElementById("chat");
 const send = document.getElementById("send");
-const attachBtn = document.getElementById("attach");
 const fileInput = document.getElementById("fileInput");
+const imageInput = document.getElementById("imageInput");
+const attachFileBtn = document.getElementById("attachFile");
+const attachImageBtn = document.getElementById("attachImage");
+const attachMapBtn = document.getElementById("attachMap");
+const attachLinkBtn = document.getElementById("attachLink");
+const attachPreview = document.getElementById("attachPreview");
 const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
@@ -21,7 +26,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.27.3). النسخة الأساسية الحية (3.1.5): https://hessin-ai-v314-fix.grok.me — السابقة hazel (3.1.1) تعطّل تحديثها.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.27.4). النسخة الأساسية الحية (3.1.5): https://hessin-ai-v314-fix.grok.me — السابقة hazel (3.1.1) تعطّل تحديثها.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -784,7 +789,11 @@ if (stopBtn) {
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
-  sendChat(input.value);
+  const text = String(input.value || "").trim();
+  if (!text && !pendingAttach) return;
+  input.value = "";
+  resizeInput();
+  commitPendingAttachThenMaybeChat(text);
 });
 
 input.addEventListener("keydown", (e) => {
@@ -812,22 +821,87 @@ clearBtn.addEventListener("click", () => {
 setupNetBanner();
 setupInstallTip();
 
+let pendingAttach = null;
+
+function clearPendingAttach() {
+  pendingAttach = null;
+  if (!attachPreview) return;
+  attachPreview.innerHTML = "";
+  attachPreview.classList.add("hidden");
+}
+
+function renderPendingAttach() {
+  if (!attachPreview) return;
+  if (!pendingAttach) {
+    attachPreview.classList.add("hidden");
+    attachPreview.innerHTML = "";
+    return;
+  }
+  attachPreview.classList.remove("hidden");
+  attachPreview.innerHTML = "";
+  const chip = document.createElement("div");
+  chip.className = "attach-chip";
+  const kind = pendingAttach.type;
+  let label = "";
+  if (kind === "file") label = "ملف: " + (pendingAttach.name || "file");
+  if (kind === "image") label = "صورة: " + (pendingAttach.name || "image");
+  if (kind === "map") label = "خريطة: " + (pendingAttach.query || "");
+  if (kind === "link") label = "رابط: " + (pendingAttach.url || "");
+  if (kind === "image" && pendingAttach.previewUrl) {
+    const img = document.createElement("img");
+    img.src = pendingAttach.previewUrl;
+    img.alt = "معاينة";
+    chip.appendChild(img);
+  }
+  const span = document.createElement("span");
+  span.textContent = label;
+  chip.appendChild(span);
+  const x = document.createElement("button");
+  x.type = "button";
+  x.textContent = "×";
+  x.title = "إزالة";
+  x.onclick = () => clearPendingAttach();
+  chip.appendChild(x);
+  attachPreview.appendChild(chip);
+}
+
+function askPrompt(title, placeholder) {
+  const v = window.prompt(title, placeholder || "");
+  return v == null ? "" : String(v).trim();
+}
+
+function normalizeHttpUrl(raw) {
+  let u = String(raw || "").trim();
+  if (!u) return "";
+  if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+  try {
+    const parsed = new URL(u);
+    if (!/^https?:$/i.test(parsed.protocol)) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function buildMapEmbed(query) {
+  const q = encodeURIComponent(String(query || "").trim());
+  return {
+    mapEmbedUrl: "https://maps.google.com/maps?q=" + q + "&z=14&output=embed",
+    mapName: String(query || "خريطة").slice(0, 80),
+    mapLink: "https://www.openstreetmap.org/search?query=" + q
+  };
+}
+
 async function analyzeSelectedFile(file) {
   if (!file) return;
   const name = file.name || "file.txt";
-  const thinking = addMessage({ text: "جارٍ قراءة الملف وتحليلها…", who: "ai" });
+  const thinking = addMessage({ text: "جارٍ قراءة الملف وتحليله…", who: "ai" });
   send.disabled = true;
   setStatus("busy", "يعمل");
   try {
     const content = await file.text();
-    addMessage({ text: "ملف: " + name + " (" + Math.min(content.length, 80000) + " حرف)", who: "user" });
-    const body = buildChatBody({
-      message: "تحليل ملف",
-      filename: name,
-      content: content.slice(0, 80000),
-      question: (input.value || "").trim() || "حلّل هذا الملف باختصار عملي."
-    });
-    // use analyze endpoint
+    addMessage({ text: "ملف: " + name, who: "user" });
+    const body = buildChatBody({});
     const headers = { "Content-Type": "application/json; charset=utf-8" };
     if (body.password) headers["x-hessin-pass"] = body.password;
     const r = await fetch("/api/analyze", {
@@ -839,7 +913,7 @@ async function analyzeSelectedFile(file) {
         password: body.password,
         filename: name,
         content: content.slice(0, 80000),
-        question: body.question,
+        question: (input.value || "").trim() || "حلّل هذا الملف باختصار عملي.",
         forceText: true
       })
     });
@@ -868,14 +942,136 @@ async function analyzeSelectedFile(file) {
     send.disabled = false;
     persistChat();
     if (fileInput) fileInput.value = "";
+    clearPendingAttach();
   }
 }
 
-if (attachBtn && fileInput) {
-  attachBtn.addEventListener("click", () => fileInput.click());
+function showLocalAttachmentMessage(data, userLabel) {
+  if (userLabel) addMessage({ text: userLabel, who: "user" });
+  const ai = addMessage({ text: data.text || "تمت الإضافة.", who: "ai" });
+  attachMedia(ai.body, data);
+  persistChat();
+}
+
+async function readImageAsDataUrl(file, maxSide = 1280) {
+  const rawUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("read_failed"));
+    reader.readAsDataURL(file);
+  });
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = rawUrl;
+    });
+    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } catch {
+    return String(rawUrl);
+  }
+}
+
+async function commitPendingAttachThenMaybeChat(text) {
+  const att = pendingAttach;
+  clearPendingAttach();
+  if (!att) {
+    if (text) await sendChat(text);
+    return;
+  }
+  if (att.type === "file" && att.file) {
+    await analyzeSelectedFile(att.file);
+    if (text) await sendChat(text);
+    return;
+  }
+  if (att.type === "image") {
+    showLocalAttachmentMessage(
+      {
+        text: "تم إرفاق الصورة." + (text ? "\n\n" + text : ""),
+        imageUrl: att.dataUrl || ""
+      },
+      "صورة: " + (att.name || "مرفقة") + (text ? "\n" + text : "")
+    );
+    return;
+  }
+  if (att.type === "map") {
+    const map = buildMapEmbed(att.query);
+    showLocalAttachmentMessage(
+      {
+        text: "خريطة: **" + att.query + "**\n\n[فتح في OpenStreetMap](" + map.mapLink + ")",
+        mapEmbedUrl: map.mapEmbedUrl,
+        mapName: map.mapName
+      },
+      "خريطة: " + att.query + (text ? "\n" + text : "")
+    );
+    return;
+  }
+  if (att.type === "link") {
+    showLocalAttachmentMessage(
+      {
+        text: "رابط مرفق:\n" + att.url,
+        siteUrl: att.url,
+        siteTitle: att.title || att.url
+      },
+      "رابط: " + att.url + (text ? "\n" + text : "")
+    );
+    return;
+  }
+  if (text) await sendChat(text);
+}
+
+if (attachFileBtn && fileInput) {
+  attachFileBtn.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
     const f = fileInput.files && fileInput.files[0];
-    if (f) analyzeSelectedFile(f);
+    if (!f) return;
+    pendingAttach = { type: "file", file: f, name: f.name };
+    renderPendingAttach();
+  });
+}
+if (attachImageBtn && imageInput) {
+  attachImageBtn.addEventListener("click", () => imageInput.click());
+  imageInput.addEventListener("change", async () => {
+    const f = imageInput.files && imageInput.files[0];
+    if (!f) return;
+    try {
+      const dataUrl = await readImageAsDataUrl(f);
+      pendingAttach = { type: "image", name: f.name, dataUrl, previewUrl: dataUrl };
+      renderPendingAttach();
+    } catch {
+      setStatus("error", "تعذر قراءة الصورة");
+    } finally {
+      imageInput.value = "";
+    }
+  });
+}
+if (attachMapBtn) {
+  attachMapBtn.addEventListener("click", () => {
+    const q = askPrompt("اكتب مكان الخريطة (مدينة، عنوان، معلم…)", "الخرطوم");
+    if (!q) return;
+    pendingAttach = { type: "map", query: q };
+    renderPendingAttach();
+  });
+}
+if (attachLinkBtn) {
+  attachLinkBtn.addEventListener("click", () => {
+    const raw = askPrompt("الصق الرابط (https://…)", "https://");
+    const url = normalizeHttpUrl(raw);
+    if (!url) {
+      setStatus("error", "رابط غير صالح");
+      return;
+    }
+    pendingAttach = { type: "link", url, title: url.replace(/^https?:\/\//i, "").split("/")[0] };
+    renderPendingAttach();
   });
 }
 

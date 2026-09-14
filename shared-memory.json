@@ -1,6 +1,6 @@
 {
   "version": 15,
-  "updated": "2026-09-14T18:40:21Z",
+  "updated": "2026-09-14T18:48:06Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
@@ -28,7 +28,7 @@
     "version_live": "3.1.5",
     "model_live": "grok-4.5",
     "pair_status": "linked_2026-09-10",
-    "version_legacy": "2.27.3",
+    "version_legacy": "2.27.4",
     "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1.5 على hessin-ai-v314-fix.grok.me",
     "site_prior": "https://hazel-palm-cosmic-pepper.grok.me",
     "version_prior": "3.1.1",
@@ -44,6 +44,7 @@
     "self_improver": "تحليل→خطة→تعديل→اختبار→شرح→PR→Approve من المالك→Vercel"
   },
   "lessons": [
+    "2026-09-14 · فريق: v2.27.4 واجهة إضافات الشات — ملف/صورة/خريطة/رابط",
     "2026-09-14 · فريق: Self-Improver معتمد بـ 9 خطوات؛ البحث بخطوات Search/Open/Extract/Sources؛ لا دمج بدون Approve",
     "2026-09-14 · فريق: v2.27.1 — مسار بحث: قرار→API→مصادر→قراءة صفحات→تحليل ومقارنة→إجابة+روابط",
     "2026-09-14 · فريق: v2.27.0 — خارطة وكيل منتج: مصادر بحث ظاهرة، تحليل ملفات نصية، وضع الوكيل، موافقات حسّاسة تلقائية؛ حسابات/مدفوعات لاحقاً",
