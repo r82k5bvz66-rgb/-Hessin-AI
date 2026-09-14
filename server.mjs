@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.8";
+const VERSION = "2.26.9";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -760,6 +760,7 @@ function commandsHelpText() {
 • خوارزميات جوجل / خوارزميات التوليد / خوارزميات الانتشار
 • نية العميل / أسئلة شائعة — تحليل نية + مسودة FAQ
 • أتمتة اليوم / عنق الزجاجة — خطة أتمتة لعنق زجاجة واحد فقط
+• تدريب جديد / درس جديد — دورة تدريب حديثة (نيات، FAQ، تسليم للبشري)
 • تعلم لوحدك / دروسي / تطوري / أفكار الكود
 • ذاكرة الفريق
 • استخدم grok / استخدم groq / اقتران
@@ -1286,6 +1287,81 @@ async function runCustomerIntent(message, history) {
 }
 
 
+const NEW_TRAINING_CURRICULUM = [
+  "درّب الردود من أسئلة حقيقية (رسائل/تعليقات/محادثات)، لا من أسئلة متخيّلة فقط",
+  "جمّع الأسئلة حسب نية العميل لا حسب تصنيفك الداخلي؛ نفس النية بصياغات مختلفة تُعامل كواحدة",
+  "ابدأ بـ 15–40 إجابة عالية التكرار منخفضة المخاطر قبل التوسيع",
+  "كل إجابة: قصيرة، بلغة العميل، بنطاق واضح، وخطوة تالية واحدة (رابط/متابعة/تصعيد)",
+  "سعّر وقياسات السياسة من مستند معتمد فقط؛ إن نقصت المعلومة قل ذلك ولا تخمّن",
+  "عرّف مسبقاً: رفض مهذب، طلب بشري، وحدود التسعير/الضمان/المناطق",
+  "اختبر أخطاء إملائية، لهجة، غضب، وحالات حدّية قبل الإطلاق",
+  "راجع المحادثات أسبوعياً: كل سؤال بلا إجابة متكرّر ≥3 مرات يصبح درساً جديداً",
+  "قيس الحل الحقيقي وتكرار الاتصال وجودة التصعيد — لا مجرد «إغلاق السؤال»",
+  "اربط الأتمتة بعنق زجاجة واحد قابل للتنفيذ عبر بيانات/ردود جاهزة قبل توسيع الأدوات"
+];
+
+function isNewTraining(message) {
+  return cmdEquals(
+    message,
+    "تدريب جديد",
+    "تدريب جديده",
+    "درس جديد",
+    "دروس جديده",
+    "دورة تدريب",
+    "درّبني",
+    "دربني",
+    "train new",
+    "new training",
+    "coach train"
+  ) || cmdIncludes(
+    message,
+    "تدريب جديد",
+    "درس جديد",
+    "دورة تدريب جديده",
+    "دورة تدريب جديدة",
+    "train new",
+    "new training"
+  );
+}
+
+function applyNewTraining(session) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  let added = 0;
+  for (const lesson of NEW_TRAINING_CURRICULUM) {
+    if (appendLesson(session, lesson, "new_training")) added += 1;
+  }
+  // قواعد تطوّر سلوكية آمنة
+  const evo = parseEvolution(session.memory);
+  const focusRules = [
+    { key: "focus", value: "درّب من أسئلة العملاء الحقيقية وجمّعها بالنية لا بالموضوع الداخلي" },
+    { key: "priority", value: "ابدأ بـ FAQ عالية التكرار منخفضة المخاطر مع خطوة تالية واضحة" },
+    { key: "avoid", value: "لا تخمّن أسعاراً أو سياسات؛ سلّم للبشري عند الشك أو طلب الإنسان" },
+    { key: "style", value: "إجابات قصيرة بلغة العميل مع نطاق واضح وتصعيد جاهز" }
+  ];
+  let evoAdded = 0;
+  for (const rule of focusRules) {
+    if (evo.rules.some((r) => r.key === rule.key && r.value.slice(0, 50) === rule.value.slice(0, 50))) continue;
+    evo.rules.push({ ...rule, at: stamp });
+    evoAdded += 1;
+  }
+  while (evo.rules.length > 20) evo.rules.shift();
+  if (evoAdded) {
+    evo.version = (Number(evo.version) || 0) + evoAdded;
+    evo.updated = new Date().toISOString();
+    saveEvolution(session, evo);
+    session.log.push({ type: "memory", key: "self_evolution" });
+  }
+  session.memory.new_training_last_date = stamp;
+  session.memory.new_training_count = String(added);
+  session.log.push({ type: "memory", key: "new_training" });
+  const lines = NEW_TRAINING_CURRICULUM.map((l, i) => `${i + 1}. ${l}`).join("\n");
+  return {
+    added,
+    evoAdded,
+    text: `تم تدريب Hessin AI على دورة حديثة (نيات العملاء + FAQ + تسليم بشري).\n\n**الدروس المضافة (${added}):**\n${lines}\n\n**قواعد سلوك (${evoAdded}):** تركيز على نيات حقيقية، FAQ قصيرة، بلا تخمين سياسات، وتصعيد واضح.\n\nخطوة اليوم: اجمع آخر 20 سؤالاً حقيقياً من العملاء، جمّعها بـ3–5 نيات، واكتب جواباً واحداً معتمداً لكل نية.\n\nللمراجعة لاحقاً: «دروسي» أو «تطوري».`
+  };
+}
+
 function isBottleneckAutomate(message) {
   return cmdIncludes(
     message,
@@ -1366,7 +1442,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isNewTraining(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -2364,7 +2440,25 @@ app.post("/api/chat", async (req, res) => {
       }
     }
 
+    if (isNewTraining(message)) {
+      const result = applyNewTraining(session);
+      return res.json({
+        text: result.text,
+        steps: [
+          { type: "plan", text: "تدريب جديد: نيات + FAQ + تصعيد" },
+          { type: "memory", text: `دروس +${result.added} · تطوّر +${result.evoAdded}` }
+        ],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "hessin",
+        command: "new_training"
+      });
+    }
+
     if (isBottleneckAutomate(message)) {
+
       const historyBottleneck = normalizeHistory(req.body?.history);
       try {
         const text = await runBottleneckAutomate(message, historyBottleneck);
@@ -2603,10 +2697,11 @@ app.get("/health", (_req, res) => {
     pairedCoach: "مدربة مشروعي Hessin Ai",
     languageTutor: true,
     bottleneckAutomate: true,
+    newTraining: true,
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.8-bottleneck-automate",
+    release: "2.26.9-new-training",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
