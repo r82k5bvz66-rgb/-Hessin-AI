@@ -40,7 +40,7 @@
     <div id="v3Banner" class="v3-banner hidden" role="region" aria-label="تنبيه النسخة الحية">
       <div class="v3-banner-text">
         <strong>تنبيه:</strong>
-        النسخة الأساسية الحية من Hessin AI (الإصدار 3.1) متوفرة على
+        النسخة الأساسية الحية من Hessin AI (الإصدار 3.1.5) متوفرة على
         <a href="https://hessin-ai-v314-fix.grok.me" target="_blank" rel="noopener noreferrer">hessin-ai-v314-fix.grok.me</a>.
         السابقة (3.0): lunar-breeze-dawn-ember.grok.me. هذه الواجهة على Vercel نسخة تراثية.
       </div>
@@ -58,7 +58,9 @@
 
     <div class="dock">
       <form id="form" class="composer">
-        <textarea id="input" rows="1" placeholder="اكتب مهمتك هنا…" autocomplete="off" enterkeyhint="send"></textarea>
+        <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.log,.tsv,.js,.mjs,.ts,.py,.html,.css,.hesl,text/*" hidden>
+        <button id="attach" type="button" class="ghost attach" title="رفع ملف نصي للتحليل">ملف</button>
+        <textarea id="input" rows="1" placeholder="اكتب مهمتك أو ارفع ملفاً…" autocomplete="off" enterkeyhint="send"></textarea>
         <button id="stop" type="button" class="stop hidden" disabled>إيقاف</button>
         <button id="send" type="submit">تنفيذ</button>
       </form>

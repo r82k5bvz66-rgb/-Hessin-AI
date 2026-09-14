@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.26.9";
+const VERSION = "2.27.0";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -761,6 +761,8 @@ function commandsHelpText() {
 • نية العميل / أسئلة شائعة — تحليل نية + مسودة FAQ
 • أتمتة اليوم / عنق الزجاجة — خطة أتمتة لعنق زجاجة واحد فقط
 • تدريب جديد / درس جديد — دورة تدريب حديثة (نيات، FAQ، تسليم للبشري)
+• وضع الوكيل — تفعيل سلوك الوكيل متعدد الخطوات
+• حلّل ملف: / تحليل ملف — بعد رفع ملف نصي من الواجهة أو لصق المحتوى
 • تعلم لوحدك / دروسي / تطوري / أفكار الكود
 • ذاكرة الفريق
 • استخدم grok / استخدم groq / اقتران
@@ -1438,11 +1440,75 @@ async function runBottleneckAutomate(message, history) {
 }
 
 
+
+function extractSources(text) {
+  const raw = String(text || "");
+  const urls = [];
+  const re = /https?:\/\/[^\s)\]>"']+/gi;
+  let m;
+  while ((m = re.exec(raw))) {
+    let u = m[0].replace(/[.,;:!?]+$/, "");
+    if (/pollinations|localhost|127\.0\.0\.1|vercel\.app\/api/i.test(u)) continue;
+    if (!urls.includes(u)) urls.push(u);
+    if (urls.length >= 8) break;
+  }
+  return urls;
+}
+
+function appendSourcesSection(text, sources) {
+  let out = String(text || "").trim();
+  const list = Array.isArray(sources) ? sources.filter(Boolean) : [];
+  if (!list.length) return out;
+  if (/المصادر\s*:/i.test(out)) return out;
+  const lines = list.map((u, i) => `${i + 1}. ${u}`).join("\n");
+  return `${out}\n\nالمصادر:\n${lines}`;
+}
+
+function isAgentModeCommand(message) {
+  return cmdEquals(
+    message,
+    "وضع الوكيل",
+    "وضع وكيل",
+    "agent mode",
+    "تفعيل الوكيل",
+    "كن وكيلا",
+    "كن وكيلاً"
+  );
+}
+
+function isFileAnalyzeCommand(message) {
+  return cmdIncludes(
+    message,
+    "حلل ملف",
+    "حلّل ملف",
+    "تحليل ملف",
+    "اقرأ الملف",
+    "اقرا الملف",
+    "analyze file",
+    "analyse file"
+  ) || cmdEquals(message, "حلل ملف", "حلّل ملف", "تحليل ملف", "analyze file");
+}
+
+function looksSensitiveAction(message) {
+  const t = normalizeCmd(message);
+  return /(انشر|نشر على|ارسل رساله|أرسل رسالة|تحويل مال|ادفع|احذف حساب|امسح قاعدة|شراء مدفوع|publish|wire transfer|delete account)/i.test(t);
+}
+
+function ensureSensitivePending(session, message, approved) {
+  if (approved || session.pending) return;
+  if (!looksSensitiveAction(message)) return;
+  session.pending = {
+    action: String(message || "").trim().slice(0, 120),
+    reason: "عملية قد تكون حسّاسة (نشر/إرسال/مال/حذف). أكّد للمتابعة."
+  };
+  session.log.push({ type: "approval", action: "auto_sensitive" });
+}
+
 function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isNewTraining(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isNewTraining(t) || isAgentModeCommand(t) || isFileAnalyzeCommand(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1706,6 +1772,13 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 إذا ذكر المستخدم معلومة ثابتة عن نفسه أو مشروعه أو أسلوبه، احفظها عبر memory_save بمفتاح قصير واضح.
 إذا طلب التصحيح، احفظ التصحيح ولا تكرر الغلط.
 في المهام المركبة: الهدف، ثم الخطوات، ثم النتيجة النهائية بنقاط واضحة.
+
+وضع الوكيل (إلزامي في المهام المركّبة):
+1) حلّل الهدف إلى خطوات قابلة للتنفيذ قبل الإجابة النهائية.
+2) استخدم الأدوات عند الحاجة (حساب، ذاكرة، ملفات، موافقة) ولا تكتفِ بردّ شات عام.
+3) بعد البحث الحي: اختم دائماً بقسم «المصادر:» فيه روابط أو أسماء مصادر واضحة (لا تخترع روابط).
+4) للعمليات الحساسة (نشر، إرسال، حذف مهم، مال): استدعِ request_approval ولا تنفّذ قبل الموافقة.
+5) احفظ تفضيلات المستخدم الثابتة في الذاكرة دون طلب إذن إضافي.
 
 البحث على الويب يتم عبر مسار browser_search على خادم Groq قبل الرد النهائي عندما تكون الأخبار أو الأسعار مطلوبة. لا تطلب موافقة على البحث أو الحساب أو إنشاء ملف نصي أو حفظ الذاكرة.
 اطلب موافقة عبر request_approval فقط قبل شراء أو نشر أو إرسال رسائل أو حذف أو تغيير صلاحيات.
@@ -2068,6 +2141,72 @@ app.get("/api/image", async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(502).json({ error: "تعذر توليد الصورة الآن." });
+  }
+});
+
+
+app.post("/api/analyze", async (req, res) => {
+  try {
+    if (!accessOk(req)) {
+      return res.status(401).json({ error: "كلمة السر غير صحيحة.", needPassword: true });
+    }
+    const name = String(req.body?.filename || "file.txt").slice(0, 120);
+    const content = String(req.body?.content || "").slice(0, 80000);
+    const question = String(req.body?.question || "حلّل هذا الملف باختصار عملي.").slice(0, 500);
+    const sessionId = sanitizeSessionId(req.body?.sessionId || "default");
+    const session = getSession(sessionId);
+    if (!content.trim()) {
+      return res.status(400).json({ error: "الملف فارغ أو غير مدعوم كنص." });
+    }
+    if (!groqKey) {
+      return res.status(500).json({ error: "مفتاح Groq غير موجود." });
+    }
+    const lower = name.toLowerCase();
+    if (!/\.(txt|md|csv|json|log|tsv|html|css|js|mjs|ts|py|hesl)$/i.test(lower) && !req.body?.forceText) {
+      // still allow if content looks like text
+      if (/[\x00-\x08\x0e-\x1f]/.test(content.slice(0, 200))) {
+        return res.status(400).json({ error: "حالياً ندعم الملفات النصية فقط (txt/md/csv/json/…). الصور قريباً." });
+      }
+    }
+    session.files[name.replace(/[^\w.\u0600-\u06FF-]+/g, "_")] = content.slice(0, 20000);
+    session.memory.last_file = name.slice(0, 80);
+    session.memory.last_file_date = new Date().toISOString().slice(0, 10);
+    const completion = await client.chat.completions.create({
+      model: resolveModel(),
+      messages: [
+        {
+          role: "system",
+          content: `أنت Hessin AI وكيل تحليل ملفات. اكتب بالعربية الفصحى.
+حلّل المحتوى المعطى فقط — لا تخترع بيانات غير موجودة.
+الهيكل: 1) نوع الملف 2) ملخص 3) نقاط مهمة 4) مخاطر/نواقص 5) خطوة عملية واحدة.
+لا تكشف أسراراً إن وُجدت مفاتيح — نبّه فقط.`
+        },
+        {
+          role: "user",
+          content: `اسم الملف: ${name}\nالسؤال: ${question}\n\nالمحتوى:\n${content.slice(0, 60000)}`
+        }
+      ],
+      temperature: 0.3,
+      max_completion_tokens: 1600
+    });
+    const text = String(completion.choices?.[0]?.message?.content || "").trim();
+    return res.json({
+      text: text || "تعذر التحليل.",
+      steps: [
+        { type: "plan", text: "قراءة ملف" },
+        { type: "plan", text: "تحليل المحتوى" }
+      ],
+      memory: session.memory,
+      files: Object.entries(session.files).slice(-3).map(([n, c]) => ({ name: n, content: String(c).slice(0, 5000) })),
+      pending: session.pending,
+      version: VERSION,
+      provider: "groq",
+      command: "analyze_file",
+      filename: name
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "تعذر تحليل الملف الآن." });
   }
 });
 
@@ -2457,6 +2596,22 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
+    if (isAgentModeCommand(message)) {
+      session.memory.agent_mode = "1";
+      session.memory.agent_mode_date = new Date().toISOString().slice(0, 10);
+      session.log.push({ type: "memory", key: "agent_mode" });
+      return res.json({
+        text: "تم تفعيل وضع الوكيل.\n\nسأعمل كوكيل متعدد الخطوات: خطة → أدوات (بحث/ذاكرة/ملفات/موافقة) → نتيجة واضحة.\nعند البحث سأذكر المصادر.\nالعمليات الحساسة تنتظر موافقتك.\n\nجرّب مهمة مثل: ابحث عن أسعار الذهب اليوم ولخّصها مع المصادر.",
+        steps: [{ type: "plan", text: "تفعيل وضع الوكيل" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "hessin",
+        command: "agent_mode"
+      });
+    }
+
     if (isBottleneckAutomate(message)) {
 
       const historyBottleneck = normalizeHistory(req.body?.history);
@@ -2594,15 +2749,18 @@ app.post("/api/chat", async (req, res) => {
             steps.push({ type: "memory", text: "أُضيف درس من الملخص لسجل التعلّم" });
           }
         }
+      const digestSources = extractSources(searchContext);
+      const digestText = appendSourcesSection(searchContext, digestSources);
       return res.json({
-        text: searchContext,
+        text: digestText,
         steps,
         memory: session.memory,
         files: [],
         pending: session.pending,
         version: VERSION,
         provider: "groq",
-        searchMode
+        searchMode,
+        sources: digestSources
       });
     }
 
@@ -2621,8 +2779,28 @@ app.post("/api/chat", async (req, res) => {
         steps.push({ type: "plan", text: "مساهمة Grok مدمجة" });
       }
     }
+    ensureSensitivePending(session, message, approved);
+    if (session.pending && !approved) {
+      return res.json({
+        text: "هذه العملية قد تكون حسّاسة. أكّد من بطاقة الموافقة بالأسفل للمتابعة، أو أعد صياغة الطلب بشكل أوضح.",
+        steps: steps.concat([{ type: "approval", text: "بانتظار موافقة" }]),
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq",
+        command: "needs_approval"
+      });
+    }
+
     const agent = await runAgentLoop({ message, session, approved, searchContext, history });
     const allSteps = steps.concat(agent.steps || []);
+    const sources = extractSources(`${searchContext || ""}\n${agent.text || ""}`);
+    let finalText = agent.text || searchContext || "اكتملت الخطوات، لكن لم يصل رد نصي.";
+    if (sources.length && (searchContext || /ابحث|بحث|سعر|أخبار|اليوم/i.test(message))) {
+      finalText = appendSourcesSection(finalText, sources);
+      allSteps.push({ type: "plan", text: `مصادر: ${sources.length}` });
+    }
 
     const files = Object.entries(session.files).map(([name, content]) => ({
       name,
@@ -2630,14 +2808,16 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     res.json({
-      text: agent.text || searchContext || "اكتملت الخطوات، لكن لم يصل رد نصي.",
+      text: finalText,
       steps: allSteps,
       memory: session.memory,
       files,
       pending: session.pending,
       version: VERSION,
       provider: provider === "pair" ? "pair" : "groq",
-      paired: provider === "pair"
+      paired: provider === "pair",
+      sources,
+      agentMode: session.memory.agent_mode === "1"
     });
   } catch (error) {
     console.error(error);
@@ -2698,10 +2878,13 @@ app.get("/health", (_req, res) => {
     languageTutor: true,
     bottleneckAutomate: true,
     newTraining: true,
+    agentMode: true,
+    fileAnalyze: true,
+    sourcesCited: true,
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.26.9-new-training",
+    release: "2.27.0-agent-roadmap",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",

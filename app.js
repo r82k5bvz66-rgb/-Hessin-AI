@@ -2,6 +2,8 @@ const form = document.getElementById("form");
 const input = document.getElementById("input");
 const chat = document.getElementById("chat");
 const send = document.getElementById("send");
+const attachBtn = document.getElementById("attach");
+const fileInput = document.getElementById("fileInput");
 const statusEl = document.getElementById("status");
 const clearBtn = document.getElementById("clear");
 const pendingEl = document.getElementById("pending");
@@ -19,7 +21,7 @@ const MEMORY_KEY = "hessin-ai-memory";
 
 let selectedProvider = localStorage.getItem("hessin-provider") || "groq";
 
-const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.26.9). النسخة الأساسية الحية (3.1.5): https://hessin-ai-v314-fix.grok.me — السابقة hazel (3.1.1) تعطّل تحديثها.";
+const WELCOME = "مرحباً بك. أنا Hessin AI، وكيلك الشخصي متعدد الخطوات.\nهذه نسخة تراثية على Vercel (2.27.0). النسخة الأساسية الحية (3.1.5): https://hessin-ai-v314-fix.grok.me — السابقة hazel (3.1.1) تعطّل تحديثها.";
 function setupNetBanner() {
   if (!netBanner) return;
   const sync = () => {
@@ -430,6 +432,33 @@ function attachMedia(bodyEl, data) {
   }
 }
 
+
+function attachSources(bodyEl, sources) {
+  if (!bodyEl || !Array.isArray(sources) || !sources.length) return;
+  let box = bodyEl.querySelector(".sources");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "sources";
+    bodyEl.appendChild(box);
+  }
+  box.innerHTML = "";
+  const title = document.createElement("strong");
+  title.textContent = "المصادر";
+  box.appendChild(title);
+  const ol = document.createElement("ol");
+  for (const url of sources.slice(0, 8)) {
+    const li = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = url;
+    li.appendChild(link);
+    ol.appendChild(li);
+  }
+  box.appendChild(ol);
+}
+
 function friendlyError(raw) {
   const t = String(raw || "");
   if (/quota|billing|insufficient|rate limit|رصيد|حدود|ممتلئ|429/i.test(t)) {
@@ -689,6 +718,7 @@ async function sendChat(text, { approved } = {}) {
     } else {
       thinking.body.innerHTML = renderMarkdown(data.text || "اكتملت الخطوات، لكن لم يصل رد نصي.");
       attachMedia(thinking.body, data);
+      attachSources(thinking.body, data.sources);
       // clear old step chips if any then add
       thinking.root.querySelectorAll(".steps,.files").forEach((el) => el.remove());
       if (data.steps && data.steps.length) {
@@ -781,6 +811,75 @@ clearBtn.addEventListener("click", () => {
 
 setupNetBanner();
 setupInstallTip();
+
+async function analyzeSelectedFile(file) {
+  if (!file) return;
+  const name = file.name || "file.txt";
+  const thinking = addMessage({ text: "جارٍ قراءة الملف وتحليلها…", who: "ai" });
+  send.disabled = true;
+  setStatus("busy", "يعمل");
+  try {
+    const content = await file.text();
+    addMessage({ text: "ملف: " + name + " (" + Math.min(content.length, 80000) + " حرف)", who: "user" });
+    const body = buildChatBody({
+      message: "تحليل ملف",
+      filename: name,
+      content: content.slice(0, 80000),
+      question: (input.value || "").trim() || "حلّل هذا الملف باختصار عملي."
+    });
+    // use analyze endpoint
+    const headers = { "Content-Type": "application/json; charset=utf-8" };
+    if (body.password) headers["x-hessin-pass"] = body.password;
+    const r = await fetch("/api/analyze", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        sessionId: body.sessionId,
+        memory: body.memory,
+        password: body.password,
+        filename: name,
+        content: content.slice(0, 80000),
+        question: body.question,
+        forceText: true
+      })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      thinking.root.classList.add("error");
+      thinking.body.textContent = friendlyError(data.error || "تعذر التحليل");
+      setStatus("error", "خطأ");
+    } else {
+      thinking.body.innerHTML = renderMarkdown(data.text || "اكتمل التحليل.");
+      attachMedia(thinking.body, data);
+      attachSources(thinking.body, data.sources);
+      if (data.memory) {
+        saveMemory(data.memory);
+        showMemoryRestored(data.memory);
+      }
+      showPending(data.pending);
+      setStatus("ready", "جاهز");
+      addMsgActions(thinking.root, data.text || "");
+    }
+  } catch (err) {
+    thinking.root.classList.add("error");
+    thinking.body.textContent = friendlyError(err && err.message ? err.message : "تعذر قراءة الملف");
+    setStatus("error", "خطأ");
+  } finally {
+    send.disabled = false;
+    persistChat();
+    if (fileInput) fileInput.value = "";
+  }
+}
+
+if (attachBtn && fileInput) {
+  attachBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (f) analyzeSelectedFile(f);
+  });
+}
+
+
 setupV3Banner();
 setupJumpLatest();
 setupKeyboardAvoidance();
