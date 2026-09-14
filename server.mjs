@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.27.1";
+const VERSION = "2.27.2";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -2140,8 +2140,19 @@ async function runSearchWithFallback(message, steps) {
 
   if (!searchText) {
     steps.push({ type: "tool", text: "ملخص عام بدون بحث حي" });
-    const text = await runGeneralDigest(message);
-    return { text, mode: "general", liveSearch: false, sources: [], pipeline: "fallback_general" };
+    try {
+      const text = await runGeneralDigest(message);
+      return { text, mode: "general", liveSearch: false, sources: [], pipeline: "fallback_general" };
+    } catch (errG) {
+      console.warn("general digest failed:", errG?.message || errG);
+      return {
+        text: "تعذر إكمال البحث الحي الآن. أعد المحاولة بعد قليل.",
+        mode: "general",
+        liveSearch: false,
+        sources: [],
+        pipeline: "fallback_general"
+      };
+    }
   }
 
   // 3) جمع عدة مصادر
@@ -2927,6 +2938,25 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
+    // مسار البحث الكامل اكتمل: قرار→بحث→مصادر→قراءة→تحليل→إجابة+روابط
+    if (wantSearch && searchContext && (searchPipeline === "decide_search_read_analyze_cite" || searchPipeline === "search_cite_only" || searchPipeline === "fallback_general")) {
+      const src = pipelineSources.length ? pipelineSources : extractSources(searchContext);
+      return res.json({
+        text: appendSourcesSection(searchContext, src),
+        steps,
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "groq",
+        searchMode,
+        sources: src,
+        pagesRead,
+        searchPipeline: searchPipeline || "research",
+        command: "research_pipeline"
+      });
+    }
+
     const history = normalizeHistory(req.body?.history);
     if (provider === "pair" && grokClient) {
       steps.push({ type: "plan", text: "اقتران Hessin + Grok" });
@@ -3062,7 +3092,7 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.27.1-research-pipeline",
+    release: "2.27.2-research-direct",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
