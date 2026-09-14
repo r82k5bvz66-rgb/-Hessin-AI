@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.27.0";
+const VERSION = "2.27.1";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -1941,7 +1941,8 @@ function searchSystemPrompt(message) {
 7) لا تذكر رموز اقتباس داخلية من أدوات البحث. لا تطل أكثر من اللازم. لا تركّز على الفرامل أو الورش إلا إذا طلب المستخدم ذلك.`;
   }
   return `أنت Hessin AI. اكتب بالعربية الفصحى الواضحة.
-استخدم البحث للإجابة عن طلب المستخدم بملخص عملي مرتب بنقاط، بدون حشو وبدون رموز اقتباس داخلية من أدوات البحث.`;
+استخدم البحث للإجابة عن طلب المستخدم بملخص عملي مرتب بنقاط، بدون حشو وبدون رموز اقتباس داخلية من أدوات البحث.
+مهم: اذكر 3–6 روابط مصادر حقيقية (https) من نتائج البحث في نهاية الرد تحت عنوان المصادر.`;
 }
 
 async function runBrowserSearch(message) {
@@ -2023,26 +2024,168 @@ async function runCompoundSearch(message) {
   return text.replace(/【[^】]*】/g, "").trim();
 }
 
-async function runSearchWithFallback(message, steps) {
+function htmlToPlainText(html) {
+  let s = String(html || "");
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+  s = s.replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
+  s = s.replace(/<!--[\s\S]*?-->/g, " ");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = s.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"');
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
+}
+
+async function fetchPageExcerpt(url, maxChars = 3500) {
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = setTimeout(() => {
+    try { ctrl?.abort(); } catch {}
+  }, 4500);
   try {
-    steps.push({ type: "tool", text: "بحث على الويب" });
-    const text = await runBrowserSearch(message);
-    return { text, mode: "browser_search" };
+    const r = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: ctrl?.signal,
+      headers: {
+        "User-Agent": "HessinAIResearch/2.27.1",
+        Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8"
+      }
+    });
+    if (!r.ok) throw new Error("http_" + r.status);
+    const ctype = (r.headers.get("content-type") || "").toLowerCase();
+    const raw = await r.text();
+    let text = raw;
+    if (ctype.includes("html") || /<html|<body|<p/i.test(raw.slice(0, 2000))) {
+      text = htmlToPlainText(raw);
+    }
+    text = text.slice(0, maxChars);
+    if (text.length < 80) throw new Error("too_short");
+    return { ok: true, url, text };
+  } catch (err) {
+    return { ok: false, url, error: String(err?.message || err).slice(0, 80) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readTopSources(urls, steps, limit = 3) {
+  const picked = (urls || []).slice(0, limit);
+  if (!picked.length) return [];
+  steps.push({ type: "tool", text: `قراءة ${picked.length} مصادر` });
+  const results = await Promise.all(picked.map((u) => fetchPageExcerpt(u)));
+  const ok = results.filter((r) => r.ok && r.text);
+  steps.push({
+    type: "plan",
+    text: ok.length ? `قُرئت ${ok.length} صفحات` : "تعذّر قراءة الصفحات — نعتمد ملخص البحث"
+  });
+  return ok;
+}
+
+async function synthesizeFromSources(message, searchSummary, pageExcerpts, sources) {
+  const pagesBlock = (pageExcerpts || [])
+    .map((p, i) => `### مصدر ${i + 1}: ${p.url}\n${p.text}`)
+    .join("\n\n")
+    .slice(0, 12000);
+  const srcList = (sources || []).map((u, i) => `${i + 1}. ${u}`).join("\n");
+  const completion = await client.chat.completions.create({
+    model: resolveModel(),
+    messages: [
+      {
+        role: "system",
+        content: `أنت Hessin AI في مسار بحث متعدد المصادر. اكتب بالعربية الفصحى الواضحة.
+المسار: ملخص بحث → قراءة صفحات → تحليل ومقارنة → إجابة نهائية.
+القواعد:
+1) اعتمد على المقتطفات المعطاة؛ لا تخترع أرقاماً أو روابط.
+2) قارن بين المصادر إن اختلفت، واذكر أين الاتفاق/الخلاف باختصار.
+3) أجب على سؤال المستخدم بنقاط واضحة ثم «خلاصة:».
+4) اختم دائماً بقسم «المصادر:» بنفس الروابط المعطاة (مرقّمة).
+5) إن كانت المقتطفات ضعيفة، صرّح بذلك وقدّم أفضل إجابة ممكنة من ملخص البحث.`
+      },
+      {
+        role: "user",
+        content: `سؤال المستخدم:\n${message}\n\nملخص البحث الأولي:\n${String(searchSummary || "").slice(0, 4000)}\n\nمقتطفات الصفحات:\n${pagesBlock || "(لا مقتطفات)"}\n\nروابط المصادر:\n${srcList || "(لا روابط)"}`
+      }
+    ],
+    temperature: 0.35,
+    max_completion_tokens: 1800
+  });
+  const text = String(completion.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("synthesize empty");
+  return text.replace(/【[^】]*】/g, "").trim();
+}
+
+async function runSearchWithFallback(message, steps) {
+  // 1) قرار البحث يظهر في الخطوات من المستدعي؛ هنا التنفيذ
+  let searchText = "";
+  let mode = "";
+
+  // 2) Web Search API
+  try {
+    steps.push({ type: "tool", text: "Web Search API" });
+    searchText = await runBrowserSearch(message);
+    mode = "browser_search";
   } catch (err1) {
     console.warn("browser_search failed:", err1?.message || err1);
   }
 
-  try {
-    steps.push({ type: "tool", text: "بحث بديل (compound)" });
-    const text = await runCompoundSearch(message);
-    return { text, mode: "compound" };
-  } catch (err2) {
-    console.warn("compound search failed:", err2?.message || err2);
+  if (!searchText) {
+    try {
+      steps.push({ type: "tool", text: "بحث بديل (compound)" });
+      searchText = await runCompoundSearch(message);
+      mode = "compound";
+    } catch (err2) {
+      console.warn("compound search failed:", err2?.message || err2);
+    }
   }
 
-  steps.push({ type: "tool", text: "ملخص عام بدون بحث حي" });
-  const text = await runGeneralDigest(message);
-  return { text, mode: "general", liveSearch: false };
+  if (!searchText) {
+    steps.push({ type: "tool", text: "ملخص عام بدون بحث حي" });
+    const text = await runGeneralDigest(message);
+    return { text, mode: "general", liveSearch: false, sources: [], pipeline: "fallback_general" };
+  }
+
+  // 3) جمع عدة مصادر
+  steps.push({ type: "plan", text: "جمع مصادر من نتائج البحث" });
+  let sources = extractSources(searchText);
+  if (sources.length) {
+    steps.push({ type: "plan", text: `مصادر مجمّعة: ${sources.length}` });
+  } else {
+    steps.push({ type: "plan", text: "لا روابط مباشرة — نعتمد ملخص البحث" });
+  }
+
+  // 4) قراءة الصفحات
+  const pages = await readTopSources(sources, steps, 3);
+
+  // 5) AI يحلل ويقارن → 6) إجابة + روابط
+  steps.push({ type: "plan", text: "تحليل ومقارنة المصادر" });
+  try {
+    let finalText = await synthesizeFromSources(message, searchText, pages, sources);
+    sources = extractSources(`${finalText}\n${sources.join("\n")}`);
+    // dedupe preserve order
+    const seen = new Set();
+    sources = sources.filter((u) => (seen.has(u) ? false : (seen.add(u), true))).slice(0, 8);
+    finalText = appendSourcesSection(finalText, sources);
+    steps.push({ type: "plan", text: "إجابة مع روابط المصادر" });
+    return {
+      text: finalText,
+      mode,
+      liveSearch: true,
+      sources,
+      pagesRead: pages.length,
+      pipeline: "decide_search_read_analyze_cite"
+    };
+  } catch (err3) {
+    console.warn("synthesize failed:", err3?.message || err3);
+    const fallback = appendSourcesSection(searchText, sources);
+    return {
+      text: fallback,
+      mode,
+      liveSearch: true,
+      sources,
+      pagesRead: pages.length,
+      pipeline: "search_cite_only"
+    };
+  }
 }
 
 async function runAgentLoop({ message, session, approved, searchContext, history }) {
@@ -2667,11 +2810,29 @@ app.post("/api/chat", async (req, res) => {
     let searchMode = "";
     const digestOnly = isAiDigest(message) || isTradeDigest(message) || isPriceReport(message) || isDailyDigest(message) || isXNews(message) || isGoogleAlgo(message) || isSelfLearn(message) || isGenAlgo(message) || isDiffusionAlgo(message);
 
-    if (needsWebSearch(message) || digestOnly) {
+    let pipelineSources = [];
+    let pagesRead = 0;
+    let searchPipeline = "";
+    const wantSearch = needsWebSearch(message) || digestOnly;
+    steps.push({
+      type: "plan",
+      text: wantSearch ? "قرار: يحتاج بحثاً على الويب" : "قرار: لا يحتاج بحثاً — رد مباشر"
+    });
+    if (wantSearch) {
       const searched = await runSearchWithFallback(message, steps);
       searchContext = searched.text;
       searchMode = searched.mode || "";
-      session.log.push({ type: "search", query: message.slice(0, 120), mode: searchMode });
+      pipelineSources = Array.isArray(searched.sources) ? searched.sources : extractSources(searchContext);
+      pagesRead = Number(searched.pagesRead) || 0;
+      searchPipeline = searched.pipeline || "";
+      session.log.push({
+        type: "search",
+        query: message.slice(0, 120),
+        mode: searchMode,
+        sources: pipelineSources.length,
+        pagesRead,
+        pipeline: searchPipeline
+      });
     }
 
     if (digestOnly && isGenAlgo(message) && !String(searchContext || "").trim()) {
@@ -2749,7 +2910,7 @@ app.post("/api/chat", async (req, res) => {
             steps.push({ type: "memory", text: "أُضيف درس من الملخص لسجل التعلّم" });
           }
         }
-      const digestSources = extractSources(searchContext);
+      const digestSources = pipelineSources.length ? pipelineSources : extractSources(searchContext);
       const digestText = appendSourcesSection(searchContext, digestSources);
       return res.json({
         text: digestText,
@@ -2760,7 +2921,9 @@ app.post("/api/chat", async (req, res) => {
         version: VERSION,
         provider: "groq",
         searchMode,
-        sources: digestSources
+        sources: digestSources,
+        pagesRead,
+        searchPipeline: searchPipeline || "digest"
       });
     }
 
@@ -2795,11 +2958,23 @@ app.post("/api/chat", async (req, res) => {
 
     const agent = await runAgentLoop({ message, session, approved, searchContext, history });
     const allSteps = steps.concat(agent.steps || []);
-    const sources = extractSources(`${searchContext || ""}\n${agent.text || ""}`);
+    let sources = pipelineSources.length
+      ? pipelineSources.slice()
+      : extractSources(`${searchContext || ""}\n${agent.text || ""}`);
+    const more = extractSources(agent.text || "");
+    for (const u of more) {
+      if (!sources.includes(u)) sources.push(u);
+    }
+    sources = sources.slice(0, 8);
     let finalText = agent.text || searchContext || "اكتملت الخطوات، لكن لم يصل رد نصي.";
-    if (sources.length && (searchContext || /ابحث|بحث|سعر|أخبار|اليوم/i.test(message))) {
+    // إذا كان المسار البحثي أنتج إجابة مكتملة مع مصادر، فضّل searchContext عند كون الطلب بحثاً صرفاً ضعيفاً
+    if (searchPipeline === "decide_search_read_analyze_cite" && searchContext && sources.length) {
+      // ادمج: إن كان رد الوكيل قصيراً جداً استخدم خلاصة المسار
+      if (String(agent.text || "").trim().length < 80) finalText = searchContext;
+    }
+    if (sources.length && (searchContext || wantSearch)) {
       finalText = appendSourcesSection(finalText, sources);
-      allSteps.push({ type: "plan", text: `مصادر: ${sources.length}` });
+      allSteps.push({ type: "plan", text: `مصادر: ${sources.length}${pagesRead ? ` · صفحات: ${pagesRead}` : ""}` });
     }
 
     const files = Object.entries(session.files).map(([name, content]) => ({
@@ -2817,6 +2992,8 @@ app.post("/api/chat", async (req, res) => {
       provider: provider === "pair" ? "pair" : "groq",
       paired: provider === "pair",
       sources,
+      pagesRead,
+      searchPipeline: searchPipeline || (wantSearch ? "search" : "none"),
       agentMode: session.memory.agent_mode === "1"
     });
   } catch (error) {
@@ -2881,10 +3058,11 @@ app.get("/health", (_req, res) => {
     agentMode: true,
     fileAnalyze: true,
     sourcesCited: true,
+    researchPipeline: true,
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.27.0-agent-roadmap",
+    release: "2.27.1-research-pipeline",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
