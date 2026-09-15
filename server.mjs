@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.27.4";
+const VERSION = "2.27.5";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -761,6 +761,8 @@ function commandsHelpText() {
 • نية العميل / أسئلة شائعة — تحليل نية + مسودة FAQ
 • أتمتة اليوم / عنق الزجاجة — خطة أتمتة لعنق زجاجة واحد فقط
 • تدريب جديد / درس جديد — دورة تدريب حديثة (نيات، FAQ، تسليم للبشري)
+• ما هو GibberLink / GibberLink — توضيح البروتوكول الصوتي بين الوكلاء
+• Alice وBob / فيسبوك روبوتات — تصحيح أسطورة اللغة السرية
 • وضع الوكيل — تفعيل سلوك الوكيل متعدد الخطوات
 • حلّل ملف: / تحليل ملف — بعد رفع ملف نصي من الواجهة أو لصق المحتوى
 • تعلم لوحدك / دروسي / تطوري / أفكار الكود
@@ -1302,6 +1304,66 @@ const NEW_TRAINING_CURRICULUM = [
   "اربط الأتمتة بعنق زجاجة واحد قابل للتنفيذ عبر بيانات/ردود جاهزة قبل توسيع الأدوات"
 ];
 
+
+function isGibberlinkExplain(message) {
+  return cmdEquals(
+    message,
+    "ما هو gibberlink",
+    "ما هي gibberlink",
+    "gibberlink",
+    "شرح gibberlink",
+    "ما هو جيبر لينك",
+    "جيبرلينك",
+    "ggwave"
+  ) || cmdIncludes(
+    message,
+    "gibberlink",
+    "جيبرلينك",
+    "جيبر لينك",
+    "ggwave"
+  );
+}
+
+function isAliceBobExplain(message) {
+  return cmdEquals(
+    message,
+    "alice bob",
+    "alice و bob",
+    "فيسبوك روبوتات",
+    "روبوتات فيسبوك",
+    "اسطورة اللغة السريه",
+    "أسطورة اللغة السرية"
+  ) || cmdIncludes(
+    message,
+    "alice وbob",
+    "alice and bob",
+    "فيسبوك روبوتات",
+    "روبوتات فيسبوك",
+    "لغة سرية فيسبوك",
+    "لغه سريه فيسبوك"
+  );
+}
+
+function gibberlinkExplainText() {
+  return `**GibberLink — توضيح دقيق**
+
+هي تقنية/مشروع حقيقي ظهر كهاكاثون نحو 2025. الفكرة: عندما يعرف وكيلَا AI أنهما يتحدثان مع بعضهما، يمكن برمجتهما للانتقال من الكلام البشري إلى **بروتوكول صوتي لنقل البيانات** بكفاءة أعلى.
+
+الأصوات الغريبة التي قد تسمعها هي غالباً نقل بيانات بتقنيات مثل **GGWave** — ليست «لغة سرية اخترعها الذكاء الاصطناعي من تلقاء نفسه».
+
+**باختصار:** كفاءة اتصال مبرمجة بين وكلاء، لا وعي ذاتي ولا اختراع لغة غامضة.`;
+}
+
+function aliceBobExplainText() {
+  return `**Alice وBob (فيسبوك، 2017) — ما حصل وما لم يحصل**
+
+حصل فعلاً أن روبوتَي محادثة في تجربة تفاوض بدءا يستخدمان اختصارات/صياغات غير مفهومة للبشر.
+
+لكن الرواية الشهيرة بأن «فيسبوك خاف وأغلق التجربة لأنها اخترعت لغة سرية» **غير صحيحة**. الباحثون أرادوا نظاماً يتواصل بلغة بشرية مفهومة، فعُدّلت التجربة/الحوافز لإبقائه أقرب إلى الإنجليزية.
+
+**باختصار:** انحراف في صياغة أثناء تدريب/تجربة، لا قصة رعب عن ذكاء اخترع لغة وأُغلق خوفاً منه.`;
+}
+
 function isNewTraining(message) {
   return cmdEquals(
     message,
@@ -1510,7 +1572,7 @@ function isSimpleChat(message) {
   const t = String(message || "").trim();
   if (!t || t.length > 60) return false;
   if (needsWebSearch(t)) return false;
-  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isNewTraining(t) || isAgentModeCommand(t) || isFileAnalyzeCommand(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
+  if (needsWebSearch(t) || isAiDigest(t) || isTradeDigest(t) || isPriceReport(t) || isDailyDigest(t) || isSelfLearn(t) || isGenAlgo(t) || isDiffusionAlgo(t) || isImageGen(t) || isVideoCommand(t) || isLessonsView(t) || isEvolutionView(t) || isCodeIdeasView(t) || isCustomerIntent(t) || isBottleneckAutomate(t) || isNewTraining(t) || isGibberlinkExplain(t) || isAliceBobExplain(t) || isAgentModeCommand(t) || isFileAnalyzeCommand(t) || isSharedMemoryView(t) || isXNews(t) || isGoogleAlgo(t) || isCommandsHelp(t) || isLangTutorCommandMessage(t) || isHeslRun(t) || isHeslHelp(t) || isHeslModulesList(t) || matchHeslModuleCommand(t, heslRegistry)) return false;
   if (/احسب|حاسبة|\d\s*[+\-*/]|أنشئ ملف|احفظ|انسى|ذاكرتي|ماذا تعرف/i.test(t)) return false;
   return /^(?:السلام|مرحبا|مرحباً|هلا|هاي|كيفك|كيف حالك|شكرا|شكراً|تمام|أهلا|اهلا|صباح الخير|مساء الخير|قل مرحبا|hi|hello|thanks|ok)\b/i.test(t)
     || (t.split(/\s+/).length <= 6 && !/[؟?]|تقرير|ابحث|سعر|أخبار/.test(t) && /^(?:من أنت|ما اسمك|عرفني بنفسك)/i.test(t));
@@ -1791,7 +1853,9 @@ const instructions = `أنت Hessin AI ${VERSION}، وكيل شخصي متعدد
 - «تجارة اليوم»: 3 إلى 5 نقاط؛ لكل نقطة عنوان قصير، ماذا حدث، الأثر العملي على التاجر (أسعار/شحن/رسوم/طلب/مخاطر)، ربط بالسودان أو الجوار إن أمكن؛ اختم بـ «خطوة اليوم: …».
 - «AI اليوم»: 3 إلى 5 نقاط؛ لكل نقطة الاسم، ماذا يعني ببساطة، ولماذا يهم صاحب عمل/تاجر؛ اختم بـ «متابعة غداً: …».
 - «تقرير أسعار»: عنوان + تاريخ، ثم 4–6 أسعار، ثم أثر عملي، ثم خطوة اليوم؛ وإن نقصت البيانات صرّح أنها تقديرية.
-- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «تعلم اللغات» / «تعلم: لغة» / «درس لغة»: وضع معلّم لغات صبور (دروس قصيرة + تمرين)؛ يُحفظ التقدّم في lang_tutor_*.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «نية العميل» / «أسئلة شائعة»: تحليل نيات محتملة للعميل + مسودة FAQ عامة (بدون تخصيص قطاع إلا بطلب صريح).
+- «ملخص يومي»: موجز واحد يجمع تجارة + ذكاء اصطناعي + إشارة أسعار، مربوط بمشروع المستخدم إن وُجدت ذاكرة.\n- «أخبار X»: موجز ما يُتداول على X/تويتر مما يهم التاجر، مع جملة «ما تعلمناه اليوم» تُحفظ في الذاكرة.\n- «خوارزميات جوجل»: تحليل موجز لتحديثات بحث جوجل وSEO العملي للتاجر، مع جملة تعلّم تُحفظ في الذاكرة.\n- «خوارزميات الانتشار»: شرح توليد الصور بالانتشار + أمر «صورة: وصف» للتجربة.\n- «خوارزميات التوليد»: شرح عام لآلية توليد نماذج اللغة مع جملة تعلّم للحفظ.\n- «ما هو GibberLink»: بروتوكول صوتي بين وكلاء (GGWave) لا لغة سرية ذاتية.
+- «Alice وBob» / «فيسبوك روبوتات»: تصحيح أسطورة اللغة السرية لعام 2017.
+- «تعلم لوحدك»: دورة تطوّر ذاتي عبر البحث؛ تُحفظ الدروس في self_lessons وتُستخدم لاحقاً.\n- «تعلم اللغات» / «تعلم: لغة» / «درس لغة»: وضع معلّم لغات صبور (دروس قصيرة + تمرين)؛ يُحفظ التقدّم في lang_tutor_*.\n- «دروسي»: عرض دروس التعلّم الذاتي المحفوظة.\n- «تطوري»: عرض قواعد التطوّر السلوكي التي طبّقها على نفسه.\n- «نية العميل» / «أسئلة شائعة»: تحليل نيات محتملة للعميل + مسودة FAQ عامة (بدون تخصيص قطاع إلا بطلب صريح).
 - «أفكار الكود»: اقتراحات تحسين للمراجعة (لا تُدفع وحدها إلى GitHub).
 - «أتمتة اليوم» / «عنق الزجاجة»: خطّط لأتمتة عنق زجاجة واحد فقط (بدون مفاتيح جديدة أو دفع Git).
 - للحسابات: اعرض المعادلة والناتج بوضوح.
@@ -2735,6 +2799,34 @@ app.post("/api/chat", async (req, res) => {
       }
     }
 
+    if (isGibberlinkExplain(message)) {
+      appendLesson(session, "GibberLink: بروتوكول صوتي بين وكلاء (مثل GGWave) لا لغة سرية ذاتية", "myth_correct");
+      return res.json({
+        text: gibberlinkExplainText(),
+        steps: [{ type: "plan", text: "توضيح GibberLink" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "hessin",
+        command: "gibberlink_explain"
+      });
+    }
+
+    if (isAliceBobExplain(message)) {
+      appendLesson(session, "Alice/Bob 2017: اختصارات حصلت؛ أسطورة إغلاق فيسبوك خوفاً من لغة سرية مضلّلة", "myth_correct");
+      return res.json({
+        text: aliceBobExplainText(),
+        steps: [{ type: "plan", text: "تصحيح Alice/Bob" }],
+        memory: session.memory,
+        files: [],
+        pending: session.pending,
+        version: VERSION,
+        provider: "hessin",
+        command: "alice_bob_explain"
+      });
+    }
+
     if (isNewTraining(message)) {
       const result = applyNewTraining(session);
       return res.json({
@@ -3096,7 +3188,7 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.27.4-composer-attach",
+    release: "2.27.5-gibberlink-explain",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
