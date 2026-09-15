@@ -3179,6 +3179,8 @@ app.get("/health", (_req, res) => {
     languageTutor: true,
     bottleneckAutomate: true,
     newTraining: true,
+    gibberlinkExplain: true,
+    aliceBobExplain: true,
     agentMode: true,
     fileAnalyze: true,
     sourcesCited: true,
