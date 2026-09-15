@@ -1,13 +1,13 @@
 {
   "version": 15,
-  "updated": "2026-09-14T18:48:06Z",
+  "updated": "2026-09-15T06:40:00Z",
   "pair": {
     "coach": "مدربة مشروعي Hessin Ai",
     "app": "Hessin AI",
     "mode": "learn_together",
     "live": "https://hessin-ai-v314-fix.grok.me",
     "legacy": "https://hessin-ai.vercel.app",
-    "note": "Vercel 2.27.1 مسار بحث متعدد المصادر؛ الحي 3.1.5",
+    "note": "Vercel 2.27.5: /api/health + سياسة خصوصية مسودة + CWV preload؛ الحي 3.1.5",
     "prior_live": "https://hazel-palm-cosmic-pepper.grok.me"
   },
   "facts": {
@@ -28,8 +28,8 @@
     "version_live": "3.1.5",
     "model_live": "grok-4.5",
     "pair_status": "linked_2026-09-10",
-    "version_legacy": "2.27.4",
-    "legacy_notice": "واجهة Vercel تعرض تنبيهاً للنسخة الحية 3.1.5 على hessin-ai-v314-fix.grok.me",
+    "version_legacy": "2.27.5",
+    "legacy_notice": "واجهة Vercel 2.27.5 تراثية؛ الحية 3.1.5 على hessin-ai-v314-fix.grok.me",
     "site_prior": "https://hazel-palm-cosmic-pepper.grok.me",
     "version_prior": "3.1.1",
     "owner_mode": "تقليل الرفض المفرط فقط؛ الحماية الصلبة تبقى؛ كلمة السر فقط عبر HESSIN_OWNER_MODE_PASSWORD في Vercel",
@@ -44,6 +44,7 @@
     "self_improver": "تحليل→خطة→تعديل→اختبار→شرح→PR→Approve من المالك→Vercel"
   },
   "lessons": [
+    "2026-09-15 · فريق: v2.27.5 — alias /api/health، مسودة سياسة خصوصية /privacy، preload لـ style.css (CWV خفيف)",
     "2026-09-14 · فريق: v2.27.4 واجهة إضافات الشات — ملف/صورة/خريطة/رابط",
     "2026-09-14 · فريق: Self-Improver معتمد بـ 9 خطوات؛ البحث بخطوات Search/Open/Extract/Sources؛ لا دمج بدون Approve",
     "2026-09-14 · فريق: v2.27.1 — مسار بحث: قرار→API→مصادر→قراءة صفحات→تحليل ومقارنة→إجابة+روابط",
