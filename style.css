@@ -581,3 +581,16 @@ button.stop:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 600px) {
   .tool-btn { padding: 6px 10px; font-size: 12px; }
 }
+
+.privacy-foot {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 6px 8px calc(10px + var(--safe-bottom));
+  margin: 0;
+  font-size: 12px;
+}
+.privacy-foot a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.privacy-foot a:hover { color: var(--accent-2); text-decoration: underline; }
