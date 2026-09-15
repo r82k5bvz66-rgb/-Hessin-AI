@@ -56,7 +56,7 @@ function normalizeProvider(raw) {
   if (p === "groq" || p === "hessin" || p === "") return "groq";
   return "groq";
 }
-const VERSION = "2.27.4";
+const VERSION = "2.27.5";
 
 const heslRegistry = loadHeslModules();
 if (heslRegistry.errors?.length) {
@@ -2547,7 +2547,7 @@ app.post("/api/chat", async (req, res) => {
       return res.json({
         text: ideas
           ? "اقتراحات تحسين للكود (للمراجعة عبر المدربة، لا تُدفع وحدها):\n" + ideas.split(" || ").map((l, i) => `${i + 1}. ${l}`).join("\n")
-          : "لا توجد اقتراحات جلسة بعد. شغّل «تعلم لوحدك» لتوليد أفكار خاصة بهذه الجلسة.\n\nاقتراحات المدربة الجاهزة للمراجعة (لا تُدفع وحدها إلى GitHub):\n1. الإبقاء على أمر أتمتة عنق زجاجة واحد فقط قبل توسيع الأدوات.\n2. تحسين Core Web Vitals تدريجياً (تحميل أسرع للواجهة).\n3. ردود أحدث عبر البحث الحي عند الأسئلة الحالية — مع تحقق من الأرقام.\n\nالتطبيق نفسه لا يدفع Git تلقائياً؛ المدربة تراجع وتدفع الآمن فقط.",
+          : "لا توجد اقتراحات جلسة بعد. شغّل «تعلم لوحدك» لتوليد أفكار خاصة بهذه الجلسة.\n\nاقتراحات المدربة الجاهزة للمراجعة (لا تُدفع وحدها إلى GitHub):\n1. مراقبة أخطاء هادئة بدون أسرار (سجلات آمنة للمالك فقط).\n2. تهذيب PWA وحدود المعدل للواجهة العامة.\n3. صفحة شروط استخدام قصيرة بجانب سياسة الخصوصية.\n\nالتطبيق نفسه لا يدفع Git تلقائياً؛ المدربة تراجع وتدفع الآمن فقط.",
         steps: [{ type: "memory", text: "عرض اقتراحات الكود" }],
         memory: session.memory,
         files: [],
@@ -3051,8 +3051,8 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-app.get("/health", (_req, res) => {
-  res.json({
+function healthPayload() {
+  return {
     ok: true,
     app: "Hessin AI",
     version: VERSION,
@@ -3080,7 +3080,7 @@ app.get("/health", (_req, res) => {
     genAlgoExplain: true,
     diffusionExplain: true,
     imageGen: true,
-    grokImage: Boolean(grokKey),
+    grokImage: Boolean(groqKey),
     grokImageModel: grokKey ? resolveGrokImageModel() : null,
     videoEmbed: true,
     pairedCoach: "مدربة مشروعي Hessin Ai",
@@ -3096,13 +3096,26 @@ app.get("/health", (_req, res) => {
     heslLang: true,
     heslModules: heslRegistry.modules,
     heslCommands: heslRegistry.commands.length,
-    release: "2.27.4-composer-attach",
+    release: "2.27.5-health-privacy-cwv",
     livePrimary: "https://hessin-ai-v314-fix.grok.me",
     priorLive: "https://hazel-palm-cosmic-pepper.grok.me",
     priorLiveVersion: "3.1.1",
     liveVersion: "3.1.5",
     legacy: true
-  });
+  };
+}
+
+function sendHealth(_req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(healthPayload());
+}
+
+app.get("/health", sendHealth);
+app.get("/api/health", sendHealth);
+
+app.get("/privacy", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.sendFile(path.join(__dirname, "privacy.html"));
 });
 
 export default app;
