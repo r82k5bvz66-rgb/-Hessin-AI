@@ -16,7 +16,8 @@
           "icon-512.png",
           "hesl.mjs",
           "hesl-build.mjs",
-          "hesl/**"
+          "hesl/**",
+          "privacy.html"
         ]
       }
     }
